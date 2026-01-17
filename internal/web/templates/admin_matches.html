@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tethys - match setup</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+    <header class="top">
+        <div class="brand">tethys</div>
+        <nav class="nav">
+            <a href="/">Live</a>
+            <a href="/opening">Opening</a>
+            <a href="/results">Results</a>
+            <a href="/games">Games</a>
+            <a href="/download/all.txt">Download all (moves)</a>
+            <a href="/admin/settings">Game settings</a>
+            <a href="/admin/matches">Match setup</a>
+            <a href="/admin/engines">Engines</a>
+            <form method="post" action="/admin/logout" style="display:inline">
+                <button type="submit" class="linkish">Logout</button>
+            </form>
+        </nav>
+    </header>
+
+    <main class="container">
+        <h1>Match setup</h1>
+
+        <div class="card">
+            <form method="post" action="/admin/matches" class="form">
+                <input type="hidden" name="pair_count" value="{{.PairCount}}" />
+                <table class="table matrix-table">
+                    <thead>
+                        <tr>
+                            <th>Engine</th>
+                            <th class="matrix-head strength-head">Strength</th>
+                            {{range .Engines}}
+                            <th class="matrix-head matrix-head-col"><span class="matrix-head-text">{{.}}</span></th>
+                            {{end}}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Rows}}
+                        <tr>
+                            <th class="matrix-head">{{.Engine}}</th>
+                            <td class="matrix-cell strength-cell">
+                                {{with (index $.Strengths .Engine)}}{{printf "%.1f" .}}%{{else}}—{{end}}
+                            </td>
+                            {{range .Cells}}
+                            <td class="matrix-cell" data-a="{{.A}}" data-b="{{.B}}">
+                                <input type="hidden" name="pair_a_{{.Index}}" value="{{.A}}" />
+                                <input type="hidden" name="pair_b_{{.Index}}" value="{{.B}}" />
+                                <label class="matrix-label" title="{{.Label}}">
+                                    <input type="checkbox" name="pair_enabled_{{.Index}}" {{if .Enabled}}checked{{end}} />
+                                </label>
+                            </td>
+                            {{end}}
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+                <div class="row">
+                    <button type="submit">Save</button>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <script>
+        (function () {
+            const cells = Array.from(document.querySelectorAll('.matrix-cell'));
+            const byKey = new Map();
+
+            function keyFor(a, b) {
+                return a < b ? `${a}::${b}` : `${b}::${a}`;
+            }
+
+            cells.forEach((cell) => {
+                const a = cell.dataset.a || '';
+                const b = cell.dataset.b || '';
+                const key = keyFor(a, b);
+                if (!byKey.has(key)) byKey.set(key, []);
+                byKey.get(key).push(cell);
+            });
+
+            cells.forEach((cell) => {
+                const checkbox = cell.querySelector('input[type="checkbox"]');
+                if (!checkbox) return;
+                checkbox.addEventListener('change', () => {
+                    const a = cell.dataset.a || '';
+                    const b = cell.dataset.b || '';
+                    const key = keyFor(a, b);
+                    const group = byKey.get(key) || [];
+                    group.forEach((other) => {
+                        const otherBox = other.querySelector('input[type="checkbox"]');
+                        if (otherBox && otherBox.checked !== checkbox.checked) {
+                            otherBox.checked = checkbox.checked;
+                        }
+                    });
+                });
+            });
+        })();
+    </script>
+</body>
+
+</html>

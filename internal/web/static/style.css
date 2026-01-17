@@ -258,6 +258,50 @@ button:hover {
     font-size: 13px;
 }
 
+.matrix-table {
+    table-layout: fixed;
+    width: auto;
+}
+
+.matrix-head {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: middle;
+    width: 28px;
+}
+
+.matrix-head-col {
+    vertical-align: bottom;
+    height: 120px;
+}
+
+.matrix-head-text {
+    display: inline-block;
+    transform: rotate(-60deg);
+    transform-origin: left bottom;
+    white-space: nowrap;
+}
+
+.matrix-cell {
+    text-align: center;
+    padding: 4px 2px;
+    width: 28px;
+}
+
+.strength-head,
+.strength-cell {
+    width: 84px;
+    text-align: right;
+    padding-right: 8px;
+    font-variant-numeric: tabular-nums;
+}
+
+.matrix-label input {
+    transform: scale(1.1);
+}
+
 .engine-grid {
     display: grid;
     grid-template-columns: 1fr 2fr 1fr;

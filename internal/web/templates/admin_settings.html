@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tethys - admin settings</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+    <header class="top">
+        <div class="brand">tethys</div>
+        <nav class="nav">
+            <a href="/">Live</a>
+            <a href="/opening">Opening</a>
+            <a href="/results">Results</a>
+            <a href="/games">Games</a>
+            <a href="/download/all.txt">Download all (moves)</a>
+            <a href="/admin/settings">Game settings</a>
+            <a href="/admin/matches">Match setup</a>
+            <a href="/admin/engines">Engines</a>
+            <form method="post" action="/admin/logout" style="display:inline">
+                <button type="submit" class="linkish">Logout</button>
+            </form>
+        </nav>
+    </header>
+
+    <main class="container">
+        <h1>Game settings</h1>
+
+        <div class="card">
+            <form method="post" action="/admin/settings" class="form">
+                <label>Movetime (ms)</label>
+                <input name="movetime_ms" value="{{.Cfg.MovetimeMS}}" />
+                <label>Max plies (half-moves)</label>
+                <input name="max_plies" value="{{.Cfg.MaxPlies}}" />
+                <label>Opening min count (no split below)</label>
+                <input name="opening_min" value="{{.Cfg.OpeningMin}}" />
+                <label class="check">
+                    <input type="checkbox" name="book_enabled" {{if .Cfg.BookEnabled}}checked{{end}} />
+                    Use opening book
+                </label>
+                <label>Opening book path</label>
+                <input name="book_path" value="{{.Cfg.BookPath}}" />
+                <label>Opening book max plies</label>
+                <input name="book_max_plies" value="{{.Cfg.BookMaxPlies}}" />
+                <div class="row">
+                    <button type="submit">Save</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="row">
+            <form method="post" action="/admin/restart">
+                <button type="submit">Restart runner now</button>
+            </form>
+        </div>
+    </main>
+</body>
+
+</html>

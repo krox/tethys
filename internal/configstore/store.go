@@ -15,11 +15,17 @@ type EngineConfig struct {
 	Path   string `json:"path"`
 	Args   string `json:"args"`
 	Init   string `json:"init"`
-	Active bool   `json:"active"`
+	Active bool `json:"active"`
+}
+
+type PairConfig struct {
+	A string `json:"a"`
+	B string `json:"b"`
 }
 
 type Config struct {
 	Engines       []EngineConfig `json:"engines"`
+	EnabledPairs []PairConfig   `json:"enabled_pairs"`
 	MovetimeMS    int            `json:"movetime_ms"`
 	Selfplay      bool           `json:"selfplay"`
 	MaxPlies      int            `json:"max_plies"`
@@ -107,46 +113,53 @@ func (s *Store) GetAndToggleAssignment(ctx context.Context) (ColorAssignment, er
 		assign.BookMaxPlies = 16
 	}
 
-	active := make([]EngineConfig, 0, len(s.cfg.Engines))
+	engineByName := make(map[string]EngineConfig)
 	for _, e := range s.cfg.Engines {
-		if !e.Active {
-			continue
-		}
 		if e.Name == "" || e.Path == "" {
 			continue
 		}
-		active = append(active, e)
+		engineByName[e.Name] = e
 	}
 
-	if len(active) == 1 {
-		assign.White, assign.Black = active[0], active[0]
-		assign.WhiteName, assign.BlackName = active[0].Name, active[0].Name
-		assign.Selfplay = true
-	} else if len(active) >= 2 {
-		assign.Selfplay = false
-		pairs := make([][2]EngineConfig, 0, len(active)*len(active))
-		for i := 0; i < len(active); i++ {
-			for j := i + 1; j < len(active); j++ {
-				pairs = append(pairs, [2]EngineConfig{active[i], active[j]})
-			}
+	validPairs := make([]PairConfig, 0, len(s.cfg.EnabledPairs))
+	for _, p := range s.cfg.EnabledPairs {
+		if p.A == "" || p.B == "" {
+			continue
 		}
+		if _, ok := engineByName[p.A]; !ok {
+			continue
+		}
+		if _, ok := engineByName[p.B]; !ok {
+			continue
+		}
+		validPairs = append(validPairs, p)
+	}
 
-		if len(pairs) > 0 {
-			idx := s.cfg.NextPairIndex
-			if idx < 0 || idx >= len(pairs) {
-				idx = 0
-			}
-			pair := pairs[idx]
-			if s.cfg.NextPairSwap {
-				assign.White, assign.Black = pair[1], pair[0]
-				assign.WhiteName, assign.BlackName = pair[1].Name, pair[0].Name
-				s.cfg.NextPairIndex = (idx + 1) % len(pairs)
-				s.cfg.NextPairSwap = false
-			} else {
-				assign.White, assign.Black = pair[0], pair[1]
-				assign.WhiteName, assign.BlackName = pair[0].Name, pair[1].Name
-				s.cfg.NextPairSwap = true
-			}
+	if len(validPairs) > 0 {
+		idx := s.cfg.NextPairIndex
+		if idx < 0 || idx >= len(validPairs) {
+			idx = 0
+		}
+		pair := validPairs[idx]
+		white := engineByName[pair.A]
+		black := engineByName[pair.B]
+		if pair.A == pair.B {
+			assign.White, assign.Black = white, white
+			assign.WhiteName, assign.BlackName = pair.A, pair.A
+			assign.Selfplay = true
+			s.cfg.NextPairIndex = (idx + 1) % len(validPairs)
+			s.cfg.NextPairSwap = false
+		} else if s.cfg.NextPairSwap {
+			assign.White, assign.Black = black, white
+			assign.WhiteName, assign.BlackName = pair.B, pair.A
+			assign.Selfplay = false
+			s.cfg.NextPairIndex = (idx + 1) % len(validPairs)
+			s.cfg.NextPairSwap = false
+		} else {
+			assign.White, assign.Black = white, black
+			assign.WhiteName, assign.BlackName = pair.A, pair.B
+			assign.Selfplay = false
+			s.cfg.NextPairSwap = true
 		}
 	}
 
@@ -206,6 +219,28 @@ func (s *Store) loadOrInit(baseDir string) error {
 			if len(engines) > 0 {
 				s.cfg.Engines = engines
 				_ = s.saveLocked()
+			}
+		}
+	}
+	if len(s.cfg.Engines) > 0 && len(s.cfg.EnabledPairs) == 0 {
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(data, &raw); err == nil {
+			if _, ok := raw["enabled_pairs"]; !ok {
+				pairs := make([]PairConfig, 0, len(s.cfg.Engines))
+				for i := 0; i < len(s.cfg.Engines); i++ {
+					for j := i; j < len(s.cfg.Engines); j++ {
+						a := s.cfg.Engines[i].Name
+						b := s.cfg.Engines[j].Name
+						if a == "" || b == "" {
+							continue
+						}
+						pairs = append(pairs, PairConfig{A: a, B: b})
+					}
+				}
+				if len(pairs) > 0 {
+					s.cfg.EnabledPairs = pairs
+					_ = s.saveLocked()
+				}
 			}
 		}
 	}
