@@ -22,32 +22,70 @@
     </header>
 
     <main class="container">
-        <h1>Past games</h1>
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Played</th>
-                    <th>White</th>
-                    <th>Black</th>
-                    <th>Result</th>
-                    <th>Moves</th>
-                </tr>
-            </thead>
-            <tbody>
-                {{range .Games}}
-                <tr>
-                    <td>{{.ID}}</td>
-                    <td>{{.PlayedAt}}</td>
-                    <td>{{.White}}</td>
-                    <td>{{.Black}}</td>
-                    <td>{{if .Result.Valid}}{{.Result.String}}{{else}}*{{end}}</td>
-                    <td><a href="/games/{{.ID}}.txt">download</a></td>
-                </tr>
-                {{end}}
-            </tbody>
-        </table>
+        <h1>Matchup summary</h1>
+        <div class="card">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>A</th>
+                        <th>A points</th>
+                        <th>Share</th>
+                        <th>B points</th>
+                        <th>B</th>
+                        <th>Movetime</th>
+                        <th>Games</th>
+                        <th>Download</th>
+                        <th>Delete game records</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Rows}}
+                    <tr>
+                        {{if .ShowNames}}
+                        <td rowspan="{{.RowSpan}}">{{.A}}</td>
+                        {{end}}
+                        <td>{{printf "%.1f" .PointsA}}</td>
+                        <td>
+                            <div class="result-bar" title="A wins {{.Wins}} / draws {{.Draws}} / B wins {{.Losses}}">
+                                <div class="result-seg win" data-pct="{{printf " %.1f" .WinPct}}"></div>
+                                <div class="result-seg draw" data-pct="{{printf " %.1f" .DrawPct}}"></div>
+                                <div class="result-seg loss" data-pct="{{printf " %.1f" .LossPct}}"></div>
+                            </div>
+                        </td>
+                        <td>{{printf "%.1f" .PointsB}}</td>
+                        {{if .ShowNames}}
+                        <td rowspan="{{.RowSpan}}">{{.B}}</td>
+                        {{end}}
+                        <td>{{.MovetimeMS}} ms</td>
+                        <td>{{.Total}}</td>
+                        <td>
+                            <a
+                                href="/games/matchup.txt?a={{.A | urlquery}}&b={{.B | urlquery}}&movetime={{.MovetimeMS}}">download</a>
+                        </td>
+                        <td>
+                            <form method="post" action="/games/delete"
+                                onsubmit="return confirm('Delete all games for this matchup and movetime?');">
+                                <input type="hidden" name="a" value="{{.A | html}}" />
+                                <input type="hidden" name="b" value="{{.B | html}}" />
+                                <input type="hidden" name="movetime" value="{{.MovetimeMS}}" />
+                                <button type="submit" class="danger">delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
     </main>
+
+    <script>
+        document.querySelectorAll('.result-seg').forEach((seg) => {
+            const pct = seg.dataset.pct;
+            if (pct) {
+                seg.style.width = `${pct}%`;
+            }
+        });
+    </script>
 </body>
 
 </html>

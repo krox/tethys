@@ -152,6 +152,15 @@ type PairResult struct {
 	Draws   int
 }
 
+type MatchupSummary struct {
+	A          string
+	B          string
+	MovetimeMS int
+	WinsA      int
+	WinsB      int
+	Draws      int
+}
+
 func (s *Store) ListFinishedGamesMoves(ctx context.Context, limit int) ([]GameMovesRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT moves_uci, COALESCE(result, '*')
@@ -248,6 +257,116 @@ func (s *Store) ResultsByPair(ctx context.Context) ([]PairResult, error) {
 		results = append(results, *entry)
 	}
 	return results, nil
+}
+
+func (s *Store) ListMatchupSummaries(ctx context.Context) ([]MatchupSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT engine_white, engine_black, movetime_ms, COALESCE(result, '*') as result, COUNT(*)
+		FROM games
+		GROUP BY engine_white, engine_black, movetime_ms, result
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := make(map[[3]string]*MatchupSummary)
+	for rows.Next() {
+		var white, black, result string
+		var movetime int
+		var count int
+		if err := rows.Scan(&white, &black, &movetime, &result, &count); err != nil {
+			return nil, err
+		}
+		if result != "1-0" && result != "0-1" && result != "1/2-1/2" {
+			continue
+		}
+		a, b := white, black
+		swap := false
+		if a > b {
+			a, b = b, a
+			swap = true
+		}
+		key := [3]string{a, b, fmt.Sprintf("%d", movetime)}
+		entry, ok := counts[key]
+		if !ok {
+			entry = &MatchupSummary{A: a, B: b, MovetimeMS: movetime}
+			counts[key] = entry
+		}
+		switch result {
+		case "1-0":
+			if swap {
+				entry.WinsB += count
+			} else {
+				entry.WinsA += count
+			}
+		case "0-1":
+			if swap {
+				entry.WinsA += count
+			} else {
+				entry.WinsB += count
+			}
+		case "1/2-1/2":
+			entry.Draws += count
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	results := make([]MatchupSummary, 0, len(counts))
+	for _, entry := range counts {
+		results = append(results, *entry)
+	}
+	return results, nil
+}
+
+// MatchupMovesLines returns one line per game for a specific matchup and movetime.
+func (s *Store) MatchupMovesLines(ctx context.Context, a, b string, movetimeMS int) (string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT moves_uci, result
+		FROM games
+		WHERE movetime_ms = ? AND ((engine_white = ? AND engine_black = ?) OR (engine_white = ? AND engine_black = ?))
+		ORDER BY id ASC
+	`, movetimeMS, a, b, b, a)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	out := ""
+	for rows.Next() {
+		var moves string
+		var res sql.NullString
+		if err := rows.Scan(&moves, &res); err != nil {
+			return "", err
+		}
+		result := "*"
+		if res.Valid && res.String != "" {
+			result = res.String
+		}
+		if moves != "" {
+			out += moves + " " + result + "\n"
+		} else {
+			out += result + "\n"
+		}
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) DeleteMatchupGames(ctx context.Context, a, b string, movetimeMS int) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `
+		DELETE FROM games
+		WHERE movetime_ms = ? AND ((engine_white = ? AND engine_black = ?) OR (engine_white = ? AND engine_black = ?))
+	`, movetimeMS, a, b, b, a)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return rows, nil
 }
 
 // AllFinishedMovesLines returns one line per game: "<moves> <result>".

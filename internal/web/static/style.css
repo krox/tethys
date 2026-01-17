@@ -206,6 +206,15 @@ button:hover {
     background: rgba(125, 211, 252, 0.18);
 }
 
+button.danger {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+button.danger:hover {
+    background: rgba(239, 68, 68, 0.25);
+}
+
 .linkish {
     background: transparent;
     border: 0;
@@ -323,6 +332,7 @@ button:hover {
     .engine-grid {
         grid-template-columns: 1fr;
     }
+
     .engine-head {
         flex-direction: column;
         align-items: flex-start;

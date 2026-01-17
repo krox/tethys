@@ -73,7 +73,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /results", h.handleResults)
 
 	mux.HandleFunc("GET /games", h.handleGames)
+	mux.HandleFunc("GET /games/matchup.txt", h.handleMatchupMoves)
 	mux.HandleFunc("GET /games/", h.handleGameMoves) // /games/{id}.txt
+	mux.HandleFunc("POST /games/delete", h.requireAdmin(h.handleMatchupDelete))
 	mux.HandleFunc("GET /download/all.txt", h.handleAllMoves)
 
 	mux.HandleFunc("GET /admin", h.requireAdmin(h.handleAdminRoot))
@@ -102,11 +104,11 @@ type ResultsRow struct {
 }
 
 type RankingRow struct {
-	Rank       int
-	Name       string
-	Strength   float64
-	ScorePct   float64
-	Games      int
+	Rank        int
+	Name        string
+	Strength    float64
+	ScorePct    float64
+	Games       int
 	StrengthPct float64
 }
 
@@ -256,10 +258,10 @@ func computeBradleyTerry(rows []db.PairResult) []RankingRow {
 			continue
 		}
 		result = append(result, RankingRow{
-			Name:       engineNames[i],
-			Strength:   strength[i],
-			ScorePct:   winScore * 100 / totalGames,
-			Games:      int(totalGames),
+			Name:        engineNames[i],
+			Strength:    strength[i],
+			ScorePct:    winScore * 100 / totalGames,
+			Games:       int(totalGames),
 			StrengthPct: strength[i] * 100 / maxStrength,
 		})
 	}
@@ -325,12 +327,129 @@ func (h *Handler) handleLiveJSON(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleGames(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	games, err := h.store.ListFinishedGames(ctx, 200)
+	matchups, err := h.store.ListMatchupSummaries(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_ = h.tpl.ExecuteTemplate(w, "games.html", map[string]any{"Games": games})
+	rows := make([]MatchupRow, 0, len(matchups))
+	for _, m := range matchups {
+		total := m.WinsA + m.WinsB + m.Draws
+		if total == 0 {
+			continue
+		}
+		rows = append(rows, MatchupRow{
+			A:          m.A,
+			B:          m.B,
+			MovetimeMS: m.MovetimeMS,
+			Wins:       m.WinsA,
+			Losses:     m.WinsB,
+			Draws:      m.Draws,
+			PointsA:    float64(m.WinsA) + 0.5*float64(m.Draws),
+			PointsB:    float64(m.WinsB) + 0.5*float64(m.Draws),
+			Total:      total,
+			WinPct:     float64(m.WinsA) * 100 / float64(total),
+			LossPct:    float64(m.WinsB) * 100 / float64(total),
+			DrawPct:    float64(m.Draws) * 100 / float64(total),
+		})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].A == rows[j].A {
+			if rows[i].B == rows[j].B {
+				return rows[i].MovetimeMS < rows[j].MovetimeMS
+			}
+			return rows[i].B < rows[j].B
+		}
+		return rows[i].A < rows[j].A
+	})
+
+	groupSizes := make(map[string]int)
+	for _, row := range rows {
+		key := row.A + "\x00" + row.B
+		groupSizes[key]++
+	}
+	seen := make(map[string]bool)
+	for i := range rows {
+		key := rows[i].A + "\x00" + rows[i].B
+		if !seen[key] {
+			rows[i].ShowNames = true
+			rows[i].RowSpan = groupSizes[key]
+			seen[key] = true
+		}
+	}
+	_ = h.tpl.ExecuteTemplate(w, "games.html", map[string]any{"Rows": rows})
+}
+
+type MatchupRow struct {
+	A          string
+	B          string
+	MovetimeMS int
+	Wins       int
+	Losses     int
+	Draws      int
+	PointsA    float64
+	PointsB    float64
+	Total      int
+	WinPct     float64
+	LossPct    float64
+	DrawPct    float64
+	ShowNames  bool
+	RowSpan    int
+}
+
+func (h *Handler) handleMatchupMoves(w http.ResponseWriter, r *http.Request) {
+	a := strings.TrimSpace(r.URL.Query().Get("a"))
+	b := strings.TrimSpace(r.URL.Query().Get("b"))
+	movetimeStr := strings.TrimSpace(r.URL.Query().Get("movetime"))
+	if a == "" || b == "" || movetimeStr == "" {
+		http.Error(w, "missing a/b/movetime", http.StatusBadRequest)
+		return
+	}
+	movetime, err := strconv.Atoi(movetimeStr)
+	if err != nil {
+		http.Error(w, "invalid movetime", http.StatusBadRequest)
+		return
+	}
+	lines, err := h.store.MatchupMovesLines(r.Context(), a, b, movetime)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	filename := fmt.Sprintf("matchup-%s-vs-%s-%dms.txt", a, b, movetime)
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", sanitizeFilename(filename)))
+	_, _ = w.Write([]byte(lines))
+}
+
+func (h *Handler) handleMatchupDelete(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	a := strings.TrimSpace(r.Form.Get("a"))
+	b := strings.TrimSpace(r.Form.Get("b"))
+	movetimeStr := strings.TrimSpace(r.Form.Get("movetime"))
+	if a == "" || b == "" || movetimeStr == "" {
+		http.Error(w, "missing a/b/movetime", http.StatusBadRequest)
+		return
+	}
+	movetime, err := strconv.Atoi(movetimeStr)
+	if err != nil {
+		http.Error(w, "invalid movetime", http.StatusBadRequest)
+		return
+	}
+	if _, err := h.store.DeleteMatchupGames(r.Context(), a, b, movetime); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/games", http.StatusSeeOther)
+}
+
+func sanitizeFilename(name string) string {
+	name = strings.ReplaceAll(name, " ", "_")
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, "\\", "-")
+	return name
 }
 
 func (h *Handler) handleGameMoves(w http.ResponseWriter, r *http.Request) {
@@ -506,9 +625,9 @@ func (h *Handler) handleAdminMatches(w http.ResponseWriter, r *http.Request) {
 	rows := buildMatchRows(cfg, order)
 	strengths := matchStrengths(ranking, cfg)
 	_ = h.tpl.ExecuteTemplate(w, "admin_matches.html", map[string]any{
-		"Cfg":      cfg,
-		"Rows":     rows,
-		"Engines":  order,
+		"Cfg":       cfg,
+		"Rows":      rows,
+		"Engines":   order,
 		"Strengths": strengths,
 		"PairCount": matchCellCount(rows),
 	})

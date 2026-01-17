@@ -54,7 +54,8 @@
                                 <input type="hidden" name="pair_a_{{.Index}}" value="{{.A}}" />
                                 <input type="hidden" name="pair_b_{{.Index}}" value="{{.B}}" />
                                 <label class="matrix-label" title="{{.Label}}">
-                                    <input type="checkbox" name="pair_enabled_{{.Index}}" {{if .Enabled}}checked{{end}} />
+                                    <input type="checkbox" name="pair_enabled_{{.Index}}" {{if
+                                        .Enabled}}checked{{end}} />
                                 </label>
                             </td>
                             {{end}}

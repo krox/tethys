@@ -15,7 +15,7 @@ type EngineConfig struct {
 	Path   string `json:"path"`
 	Args   string `json:"args"`
 	Init   string `json:"init"`
-	Active bool `json:"active"`
+	Active bool   `json:"active"`
 }
 
 type PairConfig struct {
@@ -25,7 +25,7 @@ type PairConfig struct {
 
 type Config struct {
 	Engines       []EngineConfig `json:"engines"`
-	EnabledPairs []PairConfig   `json:"enabled_pairs"`
+	EnabledPairs  []PairConfig   `json:"enabled_pairs"`
 	MovetimeMS    int            `json:"movetime_ms"`
 	Selfplay      bool           `json:"selfplay"`
 	MaxPlies      int            `json:"max_plies"`
