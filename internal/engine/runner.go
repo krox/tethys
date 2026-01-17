@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -57,7 +58,7 @@ type Runner struct {
 
 func NewRunner(store *db.Store, config *configstore.Store, b *Broadcaster) *Runner {
 	start := chess.StartingPosition()
-	return &Runner{
+	r := &Runner{
 		store:   store,
 		config:  config,
 		b:       b,
@@ -65,6 +66,14 @@ func NewRunner(store *db.Store, config *configstore.Store, b *Broadcaster) *Runn
 		restart: make(chan struct{}, 1),
 		live:    LiveState{Status: "starting", FEN: start.String(), Board: boardFromPosition(start)},
 	}
+	if store != nil {
+		if latest, err := store.LatestGame(context.Background()); err == nil {
+			r.seq = latest.ID
+		} else if err != sql.ErrNoRows {
+			log.Printf("runner: latest game lookup failed: %v", err)
+		}
+	}
+	return r
 }
 
 func (r *Runner) Start(ctx context.Context) {
