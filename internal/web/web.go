@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"embed"
@@ -14,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"tethys/internal/config"
 	"tethys/internal/configstore"
@@ -66,8 +68,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/live", h.handleLiveJSON)
 	mux.HandleFunc("GET /opening", h.handleOpeningPage)
 	mux.HandleFunc("GET /opening/fragment", h.handleOpeningFragment)
-
-
 
 	mux.HandleFunc("GET /games", h.handleGames)
 	mux.HandleFunc("GET /games/", h.handleGameMoves) // /games/{id}.txt
@@ -246,7 +246,8 @@ func (h *Handler) handleAdmin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_ = h.tpl.ExecuteTemplate(w, "admin.html", map[string]any{"Cfg": cfg})
+	view := buildAdminView(cfg, nil)
+	_ = h.tpl.ExecuteTemplate(w, "admin.html", view)
 }
 
 func (h *Handler) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
@@ -271,22 +272,42 @@ func (h *Handler) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 		bookMaxPlies = 16
 	}
 	bookEnabled := r.Form.Get("book_enabled") == "on"
-	selfplay := r.Form.Get("selfplay") == "on"
+	selfplay := false
+
+	engines, view, ok := parseEnginesFromForm(r)
+	if !ok {
+		view.Cfg.MovetimeMS = movetime
+		view.Cfg.Selfplay = selfplay
+		view.Cfg.MaxPlies = maxPlies
+		view.Cfg.OpeningMin = openingMin
+		view.Cfg.BookEnabled = bookEnabled
+		view.Cfg.BookPath = strings.TrimSpace(r.Form.Get("book_path"))
+		view.Cfg.BookMaxPlies = bookMaxPlies
+		_ = h.tpl.ExecuteTemplate(w, "admin.html", view)
+		return
+	}
+
+	if errMap := testEngines(r.Context(), engines); len(errMap) > 0 {
+		view = buildAdminView(configstore.Config{
+			Engines:      engines,
+			MovetimeMS:   movetime,
+			Selfplay:     selfplay,
+			MaxPlies:     maxPlies,
+			OpeningMin:   openingMin,
+			BookEnabled:  bookEnabled,
+			BookPath:     strings.TrimSpace(r.Form.Get("book_path")),
+			BookMaxPlies: bookMaxPlies,
+		}, errMap)
+		_ = h.tpl.ExecuteTemplate(w, "admin.html", view)
+		return
+	}
+
 	cfg := configstore.Config{
-		EngineA: configstore.EngineConfig{
-			Path: r.Form.Get("engine_a_path"),
-			Args: r.Form.Get("engine_a_args"),
-			Init: r.Form.Get("engine_a_init"),
-		},
-		EngineB: configstore.EngineConfig{
-			Path: r.Form.Get("engine_b_path"),
-			Args: r.Form.Get("engine_b_args"),
-			Init: r.Form.Get("engine_b_init"),
-		},
-		MovetimeMS: movetime,
-		Selfplay:   selfplay,
-		MaxPlies:   maxPlies,
-		OpeningMin: openingMin,
+		Engines:      engines,
+		MovetimeMS:   movetime,
+		Selfplay:     selfplay,
+		MaxPlies:     maxPlies,
+		OpeningMin:   openingMin,
 		BookEnabled:  bookEnabled,
 		BookPath:     strings.TrimSpace(r.Form.Get("book_path")),
 		BookMaxPlies: bookMaxPlies,
@@ -296,6 +317,135 @@ func (h *Handler) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/admin", http.StatusSeeOther)
+}
+
+type EngineView struct {
+	Index  int
+	Name   string
+	Path   string
+	Args   string
+	Init   string
+	Active bool
+	Error  string
+}
+
+type AdminView struct {
+	Cfg     configstore.Config
+	Engines []EngineView
+}
+
+func buildAdminView(cfg configstore.Config, errMap map[int]string) AdminView {
+	views := make([]EngineView, 0, len(cfg.Engines))
+	for i, e := range cfg.Engines {
+		view := EngineView{
+			Index:  i,
+			Name:   e.Name,
+			Path:   e.Path,
+			Args:   e.Args,
+			Init:   e.Init,
+			Active: e.Active,
+		}
+		if errMap != nil {
+			view.Error = errMap[i]
+		}
+		views = append(views, view)
+	}
+	return AdminView{Cfg: cfg, Engines: views}
+}
+
+func parseEnginesFromForm(r *http.Request) ([]configstore.EngineConfig, AdminView, bool) {
+	count, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("engine_count")))
+	if count < 0 {
+		count = 0
+	}
+
+	engines := make([]configstore.EngineConfig, 0, count)
+	viewEngines := make([]EngineView, 0, count)
+	nameIndex := make(map[string]int)
+	errMap := make(map[int]string)
+
+	for i := 0; i < count; i++ {
+		name := strings.TrimSpace(r.Form.Get(fmt.Sprintf("engine_name_%d", i)))
+		path := strings.TrimSpace(r.Form.Get(fmt.Sprintf("engine_path_%d", i)))
+		args := strings.TrimSpace(r.Form.Get(fmt.Sprintf("engine_args_%d", i)))
+		init := r.Form.Get(fmt.Sprintf("engine_init_%d", i))
+		activeVal := r.Form[fmt.Sprintf("engine_active_%d", i)]
+		active := false
+		if len(activeVal) > 0 {
+			active = activeVal[len(activeVal)-1] == "1"
+		}
+
+		if name == "" && path == "" && args == "" && strings.TrimSpace(init) == "" {
+			continue
+		}
+
+		if name == "" {
+			if _, ok := errMap[len(engines)]; !ok {
+				errMap[len(engines)] = "name required"
+			}
+		}
+		if path == "" {
+			if _, ok := errMap[len(engines)]; !ok {
+				errMap[len(engines)] = "path required"
+			}
+		}
+		if prev, ok := nameIndex[name]; ok && name != "" {
+			errMap[prev] = "duplicate name"
+			errMap[len(engines)] = "duplicate name"
+		} else if name != "" {
+			nameIndex[name] = len(engines)
+		}
+
+		engines = append(engines, configstore.EngineConfig{
+			Name:   name,
+			Path:   path,
+			Args:   args,
+			Init:   init,
+			Active: active,
+		})
+		viewEngines = append(viewEngines, EngineView{
+			Index:  len(engines) - 1,
+			Name:   name,
+			Path:   path,
+			Args:   args,
+			Init:   init,
+			Active: active,
+		})
+	}
+
+	for i := range viewEngines {
+		if errText, ok := errMap[i]; ok {
+			viewEngines[i].Error = errText
+		}
+	}
+
+	if len(errMap) > 0 {
+		cfg := configstore.Config{Engines: engines}
+		return nil, AdminView{Cfg: cfg, Engines: viewEngines}, false
+	}
+	return engines, AdminView{Cfg: configstore.Config{Engines: engines}, Engines: viewEngines}, true
+}
+
+func testEngines(ctx context.Context, engines []configstore.EngineConfig) map[int]string {
+	errMap := make(map[int]string)
+	for i, e := range engines {
+		if e.Path == "" {
+			continue
+		}
+		eng := engine.NewUCIEngine(e.Path, strings.Fields(e.Args))
+		testCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		if err := eng.Start(testCtx); err != nil {
+			errMap[i] = err.Error()
+			cancel()
+			continue
+		}
+		if err := eng.IsReady(testCtx); err != nil {
+			errMap[i] = err.Error()
+		}
+		_ = eng.Close()
+		cancel()
+	}
+	return errMap
 }
 
 func (h *Handler) handleAdminRestart(w http.ResponseWriter, r *http.Request) {

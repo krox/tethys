@@ -84,7 +84,7 @@ func autoConfigureEngines(store *configstore.Store) error {
 		return err
 	}
 
-	if cfg.EngineA.Path != "" || cfg.EngineB.Path != "" {
+	if len(cfg.Engines) > 0 {
 		return nil
 	}
 
@@ -97,8 +97,13 @@ func autoConfigureEngines(store *configstore.Store) error {
 		return nil
 	}
 
-	cfg.EngineA.Path = stockfishPath
-	cfg.EngineB.Path = stockfishPath
+	cfg.Engines = []configstore.EngineConfig{
+		{
+			Name:   "stockfish",
+			Path:   stockfishPath,
+			Active: true,
+		},
+	}
 	return store.UpdateConfig(ctx, cfg)
 }
 

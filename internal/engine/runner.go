@@ -160,8 +160,8 @@ func (r *Runner) loop(parent context.Context) {
 				return
 			}
 
-			whiteDisplay := engineDisplayName(assignment.White.Path, assignment.WhiteName)
-			blackDisplay := engineDisplayName(assignment.Black.Path, assignment.BlackName)
+			whiteDisplay := assignment.WhiteName
+			blackDisplay := assignment.BlackName
 
 			r.seq++
 			r.setLive(func(ls *LiveState) {

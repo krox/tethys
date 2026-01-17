@@ -35,10 +35,6 @@
                 <label>Opening min count (no split below)</label>
                 <input name="opening_min" value="{{.Cfg.OpeningMin}}" />
                 <label class="check">
-                    <input type="checkbox" name="selfplay" {{if .Cfg.Selfplay}}checked{{end}} />
-                    Selfplay (one engine plays both sides)
-                </label>
-                <label class="check">
                     <input type="checkbox" name="book_enabled" {{if .Cfg.BookEnabled}}checked{{end}} />
                     Use opening book
                 </label>
@@ -47,21 +43,56 @@
                 <label>Opening book max plies</label>
                 <input name="book_max_plies" value="{{.Cfg.BookMaxPlies}}" />
 
-                <h2>Engine A</h2>
-                <label>Path</label>
-                <input name="engine_a_path" value="{{.Cfg.EngineA.Path}}" placeholder="/usr/games/stockfish" />
-                <label>Args (split by spaces)</label>
-                <input name="engine_a_args" value="{{.Cfg.EngineA.Args}}" placeholder="" />
-                <label>Init commands (one per line)</label>
-                <textarea name="engine_a_init" rows="6">{{.Cfg.EngineA.Init}}</textarea>
+                <h2>Engine activation</h2>
+                <div id="engine_activation" class="activation-list">
+                    {{range .Engines}}
+                    <div class="activation-row" data-index="{{.Index}}">
+                        <label class="check compact">
+                            <input type="hidden" name="engine_active_{{.Index}}" value="0" data-field="active" />
+                            <input type="checkbox" name="engine_active_{{.Index}}" value="1" data-field="active" {{if
+                                .Active}}checked{{end}} />
+                            <span class="activation-label">{{.Name}}{{if .Path}} — {{.Path}}{{end}}</span>
+                        </label>
+                    </div>
+                    {{end}}
+                </div>
 
-                <h2>Engine B</h2>
-                <label>Path</label>
-                <input name="engine_b_path" value="{{.Cfg.EngineB.Path}}" placeholder="/usr/games/stockfish" />
-                <label>Args (split by spaces)</label>
-                <input name="engine_b_args" value="{{.Cfg.EngineB.Args}}" placeholder="" />
-                <label>Init commands (one per line)</label>
-                <textarea name="engine_b_init" rows="6">{{.Cfg.EngineB.Init}}</textarea>
+                <h2>Engines</h2>
+                <input type="hidden" name="engine_count" id="engine_count" value="{{len .Engines}}" />
+                <div id="engine_list">
+                    {{range .Engines}}
+                    <div class="engine-card" data-index="{{.Index}}" data-active="{{if .Active}}1{{else}}0{{end}}">
+                        <div class="engine-head">
+                            {{if .Error}}<span class="error">{{.Error}}</span>{{end}}
+                            <div class="engine-actions">
+                                <button type="button" class="duplicate-engine">Duplicate</button>
+                                <button type="button" class="delete-engine">Delete</button>
+                            </div>
+                        </div>
+                        <div class="engine-grid">
+                            <div>
+                                <label>Name</label>
+                                <input name="engine_name_{{.Index}}" data-field="name" value="{{.Name}}" placeholder="unique name" />
+                            </div>
+                            <div>
+                                <label>Path</label>
+                                <input name="engine_path_{{.Index}}" data-field="path" value="{{.Path}}" placeholder="/usr/games/stockfish" />
+                            </div>
+                            <div>
+                                <label>Args</label>
+                                <input name="engine_args_{{.Index}}" data-field="args" value="{{.Args}}" placeholder="" />
+                            </div>
+                            <div class="engine-init">
+                                <label>Init commands (one per line)</label>
+                                <textarea name="engine_init_{{.Index}}" data-field="init" rows="4">{{.Init}}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+                <div class="row">
+                    <button type="button" id="add_engine">Add engine</button>
+                </div>
 
                 <div class="row">
                     <button type="submit">Save</button>
@@ -78,6 +109,167 @@
         <p class="hint">Notes: engine args are split on spaces (no shell quoting). Init commands are sent as-is, then
             `isready`.</p>
     </main>
+
+    <script>
+        (function () {
+            const list = document.getElementById('engine_list');
+            const activation = document.getElementById('engine_activation');
+            const countEl = document.getElementById('engine_count');
+            const addBtn = document.getElementById('add_engine');
+
+            function newEngineRow(index) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'engine-card';
+                wrapper.dataset.index = String(index);
+                wrapper.dataset.active = '0';
+                wrapper.innerHTML = `
+                    <div class="engine-head">
+                        <div class="engine-actions">
+                            <button type="button" class="duplicate-engine">Duplicate</button>
+                            <button type="button" class="delete-engine">Delete</button>
+                        </div>
+                    </div>
+                    <div class="engine-grid">
+                        <div>
+                            <label>Name</label>
+                            <input name="engine_name_${index}" data-field="name" value="" placeholder="unique name" />
+                        </div>
+                        <div>
+                            <label>Path</label>
+                            <input name="engine_path_${index}" data-field="path" value="" placeholder="/usr/games/stockfish" />
+                        </div>
+                        <div>
+                            <label>Args</label>
+                            <input name="engine_args_${index}" data-field="args" value="" placeholder="" />
+                        </div>
+                        <div class="engine-init">
+                            <label>Init commands (one per line)</label>
+                            <textarea name="engine_init_${index}" data-field="init" rows="4"></textarea>
+                        </div>
+                    </div>
+                `;
+                return wrapper;
+            }
+
+            function syncIndices() {
+                const cards = Array.from(list.querySelectorAll('.engine-card'));
+                activation.innerHTML = '';
+                cards.forEach((card, index) => {
+                    card.dataset.index = String(index);
+                    card.querySelectorAll('[data-field]').forEach((el) => {
+                        const field = el.getAttribute('data-field');
+                        if (!field) return;
+                        el.name = `engine_${field}_${index}`;
+                    });
+
+                    const nameInput = card.querySelector('input[data-field="name"]');
+                    const pathInput = card.querySelector('input[data-field="path"]');
+                    const name = nameInput ? nameInput.value.trim() : '';
+                    const path = pathInput ? pathInput.value.trim() : '';
+                    const labelText = name && path ? `${name} — ${path}` : (name || path || 'unnamed');
+
+                    const row = document.createElement('div');
+                    row.className = 'activation-row';
+                    row.dataset.index = String(index);
+                    row.innerHTML = `
+                        <label class="check compact">
+                            <input type="hidden" name="engine_active_${index}" value="0" data-field="active" />
+                            <input type="checkbox" name="engine_active_${index}" value="1" data-field="active" />
+                            <span class="activation-label"></span>
+                        </label>
+                    `;
+                    const checkbox = row.querySelector('input[type="checkbox"]');
+                    checkbox.checked = card.dataset.active === '1';
+                    checkbox.addEventListener('change', () => {
+                        card.dataset.active = checkbox.checked ? '1' : '0';
+                    });
+                    row.querySelector('.activation-label').textContent = labelText;
+                    activation.appendChild(row);
+
+                    if (nameInput) {
+                        nameInput.oninput = refreshActivationLabels;
+                    }
+                    if (pathInput) {
+                        pathInput.oninput = refreshActivationLabels;
+                    }
+                });
+                countEl.value = String(cards.length);
+            }
+
+            function refreshActivationLabels() {
+                const cards = Array.from(list.querySelectorAll('.engine-card'));
+                const rows = Array.from(activation.querySelectorAll('.activation-row'));
+                rows.forEach((row, index) => {
+                    const card = cards[index];
+                    if (!card) return;
+                    const nameInput = card.querySelector('input[data-field="name"]');
+                    const pathInput = card.querySelector('input[data-field="path"]');
+                    const name = nameInput ? nameInput.value.trim() : '';
+                    const path = pathInput ? pathInput.value.trim() : '';
+                    const labelText = name && path ? `${name} — ${path}` : (name || path || 'unnamed');
+                    const label = row.querySelector('.activation-label');
+                    if (label) label.textContent = labelText;
+                });
+            }
+
+            function collectNames() {
+                const names = [];
+                list.querySelectorAll('input[data-field="name"]').forEach((el) => {
+                    const value = (el.value || '').trim();
+                    if (value) names.push(value);
+                });
+                return names;
+            }
+
+            function uniqueName(base) {
+                const names = collectNames();
+                if (!names.includes(base)) return base;
+                let n = 2;
+                let candidate = `${base.replace(/\s*\(copy\s*\d*\)\s*$/i, '')} (copy ${n})`;
+                while (names.includes(candidate)) {
+                    n++;
+                    candidate = `${base.replace(/\s*\(copy\s*\d*\)\s*$/i, '')} (copy ${n})`;
+                }
+                return candidate;
+            }
+
+            function bindCardActions(card) {
+                const del = card.querySelector('.delete-engine');
+                const dup = card.querySelector('.duplicate-engine');
+
+                del.addEventListener('click', () => {
+                    card.remove();
+                    syncIndices();
+                });
+
+                dup.addEventListener('click', () => {
+                    const clone = card.cloneNode(true);
+                    const nameInput = clone.querySelector('input[data-field="name"]');
+                    const errorEl = clone.querySelector('.error');
+                    if (errorEl) errorEl.remove();
+
+                    const baseName = nameInput && nameInput.value ? `${nameInput.value.trim()} (copy)` : 'engine (copy)';
+                    if (nameInput) nameInput.value = uniqueName(baseName);
+                    clone.dataset.active = '0';
+
+                    list.appendChild(clone);
+                    syncIndices();
+                    bindCardActions(clone);
+                });
+            }
+
+            addBtn.addEventListener('click', function () {
+                const index = parseInt(countEl.value || '0', 10);
+                const card = newEngineRow(index);
+                list.appendChild(card);
+                syncIndices();
+                bindCardActions(card);
+            });
+
+            list.querySelectorAll('.engine-card').forEach((card) => bindCardActions(card));
+            syncIndices();
+        })();
+    </script>
 </body>
 
 </html>
