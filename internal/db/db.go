@@ -161,6 +161,13 @@ type MatchupSummary struct {
 	Draws      int
 }
 
+type MatchupCount struct {
+	White      string
+	Black      string
+	MovetimeMS int
+	Count      int
+}
+
 func (s *Store) ListFinishedGamesMoves(ctx context.Context, limit int) ([]GameMovesRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT moves_uci, COALESCE(result, '*')
@@ -319,6 +326,28 @@ func (s *Store) ListMatchupSummaries(ctx context.Context) ([]MatchupSummary, err
 		results = append(results, *entry)
 	}
 	return results, nil
+}
+
+func (s *Store) ListMatchupCounts(ctx context.Context) ([]MatchupCount, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT engine_white, engine_black, movetime_ms, COUNT(*)
+		FROM games
+		GROUP BY engine_white, engine_black, movetime_ms
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []MatchupCount
+	for rows.Next() {
+		var row MatchupCount
+		if err := rows.Scan(&row.White, &row.Black, &row.MovetimeMS, &row.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
 }
 
 // MatchupMovesLines returns one line per game for a specific matchup and movetime.

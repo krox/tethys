@@ -42,6 +42,7 @@ type Runner struct {
 	config   *configstore.Store
 	b        *Broadcaster
 	seq      int64
+	pickIdx  int
 	bookMu   sync.Mutex
 	bookPath string
 	bookMod  time.Time
@@ -137,7 +138,7 @@ func (r *Runner) loop(parent context.Context) {
 		func() {
 			defer cancel()
 
-			assignment, err := r.config.GetAndToggleAssignment(ctx)
+			cfg, err := r.config.GetConfig(ctx)
 			if err != nil {
 				log.Printf("runner: config error: %v", err)
 				r.setLive(func(ls *LiveState) {
@@ -147,6 +148,18 @@ func (r *Runner) loop(parent context.Context) {
 				time.Sleep(2 * time.Second)
 				return
 			}
+
+			counts := []db.MatchupCount{}
+			if r.store != nil {
+				if rows, err := r.store.ListMatchupCounts(ctx); err == nil {
+					counts = rows
+				} else {
+					log.Printf("runner: matchup count error: %v", err)
+				}
+			}
+
+			assignment, nextIdx := selectAssignment(cfg, counts, r.pickIdx)
+			r.pickIdx = nextIdx
 
 			if assignment.White.Path == "" || assignment.Black.Path == "" {
 				start := chess.StartingPosition()
@@ -179,8 +192,9 @@ func (r *Runner) loop(parent context.Context) {
 			blackArgs := strings.Fields(assignment.Black.Args)
 
 			white := NewUCIEngine(assignment.White.Path, whiteArgs)
+			selfplay := assignment.WhiteName == assignment.BlackName
 			var black *UCIEngine
-			if assignment.Selfplay {
+			if selfplay {
 				black = white
 			} else {
 				black = NewUCIEngine(assignment.Black.Path, blackArgs)
@@ -192,7 +206,7 @@ func (r *Runner) loop(parent context.Context) {
 			}
 			defer func() { _ = white.Close() }()
 
-			if !assignment.Selfplay {
+			if !selfplay {
 				if err := black.Start(ctx); err != nil {
 					r.failGame(ctx, "*", fmt.Sprintf("black start error: %v", err))
 					return
@@ -204,7 +218,8 @@ func (r *Runner) loop(parent context.Context) {
 				r.failGame(ctx, "*", fmt.Sprintf("white init error: %v", err))
 				return
 			}
-			if assignment.Selfplay {
+
+			if selfplay {
 				if err := applyInit(ctx, black, assignment.White.Init); err != nil {
 					r.failGame(ctx, "*", fmt.Sprintf("black init error: %v", err))
 					return
@@ -220,7 +235,7 @@ func (r *Runner) loop(parent context.Context) {
 				r.failGame(ctx, "*", fmt.Sprintf("white newgame error: %v", err))
 				return
 			}
-			if !assignment.Selfplay {
+			if !selfplay {
 				if err := black.NewGame(ctx); err != nil {
 					r.failGame(ctx, "*", fmt.Sprintf("black newgame error: %v", err))
 					return
@@ -325,6 +340,106 @@ func (r *Runner) loop(parent context.Context) {
 		// Small pause between games, even on failure.
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+type matchupCandidate struct {
+	White string
+	Black string
+}
+
+func selectAssignment(cfg configstore.Config, counts []db.MatchupCount, pickIdx int) (configstore.ColorAssignment, int) {
+	assign := configstore.ColorAssignment{
+		MovetimeMS:   cfg.MovetimeMS,
+		MaxPlies:     cfg.MaxPlies,
+		BookEnabled:  cfg.BookEnabled,
+		BookPath:     cfg.BookPath,
+		BookMaxPlies: cfg.BookMaxPlies,
+	}
+	if assign.MovetimeMS <= 0 {
+		assign.MovetimeMS = 100
+	}
+	if assign.MaxPlies <= 0 {
+		assign.MaxPlies = 200
+	}
+	if assign.BookMaxPlies <= 0 {
+		assign.BookMaxPlies = 16
+	}
+
+	engineByName := make(map[string]configstore.EngineConfig)
+	for _, e := range cfg.Engines {
+		if e.Name == "" || e.Path == "" {
+			continue
+		}
+		engineByName[e.Name] = e
+	}
+
+	validPairs := make([]configstore.PairConfig, 0, len(cfg.EnabledPairs))
+	for _, p := range cfg.EnabledPairs {
+		if p.A == "" || p.B == "" {
+			continue
+		}
+		if _, ok := engineByName[p.A]; !ok {
+			continue
+		}
+		if _, ok := engineByName[p.B]; !ok {
+			continue
+		}
+		validPairs = append(validPairs, p)
+	}
+
+	if len(validPairs) == 0 {
+		return assign, 0
+	}
+
+	countMap := make(map[string]int)
+	for _, c := range counts {
+		key := fmt.Sprintf("%s\x00%s\x00%d", c.White, c.Black, c.MovetimeMS)
+		countMap[key] = c.Count
+	}
+
+	candidates := make([]matchupCandidate, 0, len(validPairs)*2)
+	for _, p := range validPairs {
+		if p.A == p.B {
+			candidates = append(candidates, matchupCandidate{White: p.A, Black: p.A})
+			continue
+		}
+		candidates = append(candidates, matchupCandidate{White: p.A, Black: p.B})
+		candidates = append(candidates, matchupCandidate{White: p.B, Black: p.A})
+	}
+
+	minCount := -1
+	for _, c := range candidates {
+		key := fmt.Sprintf("%s\x00%s\x00%d", c.White, c.Black, assign.MovetimeMS)
+		count := countMap[key]
+		if minCount == -1 || count < minCount {
+			minCount = count
+		}
+	}
+
+	filtered := make([]matchupCandidate, 0, len(candidates))
+	for _, c := range candidates {
+		key := fmt.Sprintf("%s\x00%s\x00%d", c.White, c.Black, assign.MovetimeMS)
+		if countMap[key] == minCount {
+			filtered = append(filtered, c)
+		}
+	}
+	if len(filtered) == 0 {
+		filtered = candidates
+	}
+
+	idx := pickIdx
+	if idx < 0 || idx >= len(filtered) {
+		idx = 0
+	}
+	chosen := filtered[idx]
+
+	white := engineByName[chosen.White]
+	black := engineByName[chosen.Black]
+	assign.White, assign.Black = white, black
+	assign.WhiteName, assign.BlackName = chosen.White, chosen.Black
+
+	nextIdx := (idx + 1) % len(filtered)
+	return assign, nextIdx
 }
 
 func (r *Runner) failGame(ctx context.Context, result, termination string) {

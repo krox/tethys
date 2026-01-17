@@ -695,13 +695,12 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 }
 
 type EngineView struct {
-	Index  int
-	Name   string
-	Path   string
-	Args   string
-	Init   string
-	Active bool
-	Error  string
+	Index int
+	Name  string
+	Path  string
+	Args  string
+	Init  string
+	Error string
 }
 
 type PairView struct {
@@ -722,12 +721,11 @@ func buildAdminView(cfg configstore.Config, errMap map[int]string) AdminView {
 	views := make([]EngineView, 0, len(cfg.Engines))
 	for i, e := range cfg.Engines {
 		view := EngineView{
-			Index:  i,
-			Name:   e.Name,
-			Path:   e.Path,
-			Args:   e.Args,
-			Init:   e.Init,
-			Active: e.Active,
+			Index: i,
+			Name:  e.Name,
+			Path:  e.Path,
+			Args:  e.Args,
+			Init:  e.Init,
 		}
 		if errMap != nil {
 			view.Error = errMap[i]
@@ -793,12 +791,6 @@ func parseEnginesFromForm(r *http.Request) ([]configstore.EngineConfig, AdminVie
 		path := strings.TrimSpace(r.Form.Get(fmt.Sprintf("engine_path_%d", i)))
 		args := strings.TrimSpace(r.Form.Get(fmt.Sprintf("engine_args_%d", i)))
 		init := r.Form.Get(fmt.Sprintf("engine_init_%d", i))
-		activeVal := r.Form[fmt.Sprintf("engine_active_%d", i)]
-		active := false
-		if len(activeVal) > 0 {
-			active = activeVal[len(activeVal)-1] == "1"
-		}
-
 		if name == "" && path == "" && args == "" && strings.TrimSpace(init) == "" {
 			continue
 		}
@@ -821,19 +813,17 @@ func parseEnginesFromForm(r *http.Request) ([]configstore.EngineConfig, AdminVie
 		}
 
 		engines = append(engines, configstore.EngineConfig{
-			Name:   name,
-			Path:   path,
-			Args:   args,
-			Init:   init,
-			Active: active,
+			Name: name,
+			Path: path,
+			Args: args,
+			Init: init,
 		})
 		viewEngines = append(viewEngines, EngineView{
-			Index:  len(engines) - 1,
-			Name:   name,
-			Path:   path,
-			Args:   args,
-			Init:   init,
-			Active: active,
+			Index: len(engines) - 1,
+			Name:  name,
+			Path:  path,
+			Args:  args,
+			Init:  init,
 		})
 	}
 

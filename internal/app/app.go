@@ -99,9 +99,8 @@ func autoConfigureEngines(store *configstore.Store) error {
 
 	cfg.Engines = []configstore.EngineConfig{
 		{
-			Name:   "stockfish",
-			Path:   stockfishPath,
-			Active: true,
+			Name: "stockfish",
+			Path: stockfishPath,
 		},
 	}
 	return store.UpdateConfig(ctx, cfg)
