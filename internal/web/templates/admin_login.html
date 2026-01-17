@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tethys - admin login</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+    <header class="top">
+        <div class="brand">tethys</div>
+        <nav class="nav">
+            <a href="/">Live</a>
+            <a href="/games">Games</a>
+            <a href="/download/all.pgn">Download all (PGN)</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        <h1>Admin login</h1>
+        {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+        <form method="post" action="/admin/login" class="card">
+            <label>Password</label>
+            <input type="password" name="password" autofocus />
+            <div class="row">
+                <button type="submit">Login</button>
+            </div>
+        </form>
+    </main>
+</body>
+
+</html>

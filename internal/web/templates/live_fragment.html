@@ -1,0 +1,27 @@
+<div class="grid">
+    <div>
+        <div class="kv"><span>Game</span><span>#{{.GameID}}</span></div>
+        <div class="kv"><span>Status</span><span>{{.Status}}</span></div>
+        <div class="kv"><span>White</span><span>{{.White}}</span></div>
+        <div class="kv"><span>Black</span><span>{{.Black}}</span></div>
+        <div class="kv"><span>Movetime</span><span>{{.MovetimeMS}} ms</span></div>
+        <div class="kv"><span>Result</span><span>{{.Result}}</span></div>
+        <div class="kv"><span>FEN</span><span class="mono">{{.FEN}}</span></div>
+    </div>
+
+    <div>
+        <h3>Board</h3>
+        <div class="board">
+            {{range .Board}}
+            <div class="rank">
+                {{range .}}
+                <div class="{{.Class}}">{{.Glyph}}</div>
+                {{end}}
+            </div>
+            {{end}}
+        </div>
+
+        <h3>Moves (UCI)</h3>
+        <pre class="moves">{{range $i, $m := .MovesUCI}}{{if $i}} {{end}}{{$m}}{{end}}</pre>
+    </div>
+</div>

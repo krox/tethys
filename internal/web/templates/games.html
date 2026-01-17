@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tethys - games</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+    <header class="top">
+        <div class="brand">tethys</div>
+        <nav class="nav">
+            <a href="/">Live</a>
+            <a href="/opening">Opening</a>
+            <a href="/games">Games</a>
+            <a href="/download/all.txt">Download all (moves)</a>
+            <a href="/admin">Admin</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        <h1>Past games</h1>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Played</th>
+                    <th>White</th>
+                    <th>Black</th>
+                    <th>Result</th>
+                    <th>Moves</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Games}}
+                <tr>
+                    <td>{{.ID}}</td>
+                    <td>{{.PlayedAt}}</td>
+                    <td>{{.White}}</td>
+                    <td>{{.Black}}</td>
+                    <td>{{if .Result.Valid}}{{.Result.String}}{{else}}*{{end}}</td>
+                    <td><a href="/games/{{.ID}}.txt">download</a></td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </main>
+</body>
+
+</html>

@@ -1,0 +1,30 @@
+{{define "opening_node"}}
+<li class="opening-node">
+    <div class="opening-row">
+        <span class="move">{{.Move}}</span>
+        <span class="meta">{{.Count}} times</span>
+        <span class="meta">W {{.WhiteWins}} / B {{.BlackWins}} / D {{.Draws}}</span>
+    </div>
+    {{if .Children}}
+    <ul class="opening-children">
+        {{range .Children}}
+        {{template "opening_node" .}}
+        {{end}}
+    </ul>
+    {{end}}
+</li>
+{{end}}
+
+<div class="opening">
+    <div class="opening-summary">Showing first {{.MaxPlies}} plies from last {{.Games}} finished games. Nodes with &lt;
+        {{.MinCount}} visits are not expanded.</div>
+    {{if .Root.Children}}
+    <ul class="opening-tree">
+        {{range .Root.Children}}
+        {{template "opening_node" .}}
+        {{end}}
+    </ul>
+    {{else}}
+    <div class="opening-empty">No finished games yet.</div>
+    {{end}}
+</div>

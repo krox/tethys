@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tethys</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+    <header class="top">
+        <div class="brand">tethys</div>
+        <nav class="nav">
+            <a href="/">Live</a>
+            <a href="/opening">Opening</a>
+            <a href="/games">Games</a>
+            <a href="/download/all.txt">Download all (moves)</a>
+            <a href="/admin">Admin</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        <h1>Live game</h1>
+        <div id="live" class="card" data-url="/live/fragment">Loading…</div>
+    </main>
+
+    <script>
+        async function refreshLive() {
+            const el = document.getElementById('live');
+            const url = el.getAttribute('data-url');
+            const res = await fetch(url, { cache: 'no-store' });
+            el.innerHTML = await res.text();
+        }
+
+        refreshLive();
+
+        const es = new EventSource('/api/live/events');
+        es.addEventListener('update', () => {
+            refreshLive();
+        });
+    </script>
+</body>
+
+</html>

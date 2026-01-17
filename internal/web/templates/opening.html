@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tethys - opening explorer</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+    <header class="top">
+        <div class="brand">tethys</div>
+        <nav class="nav">
+            <a href="/">Live</a>
+            <a href="/opening">Opening</a>
+            <a href="/games">Games</a>
+            <a href="/download/all.txt">Download all (moves)</a>
+            <a href="/admin">Admin</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        <h1>Opening explorer</h1>
+        <div id="opening" class="card" data-url="/opening/fragment">Loading…</div>
+    </main>
+
+    <script>
+        async function refreshOpening() {
+            const el = document.getElementById('opening');
+            const url = el.getAttribute('data-url');
+            const res = await fetch(url, { cache: 'no-store' });
+            el.innerHTML = await res.text();
+        }
+
+        refreshOpening();
+        setInterval(refreshOpening, 30000);
+    </script>
+</body>
+
+</html>
