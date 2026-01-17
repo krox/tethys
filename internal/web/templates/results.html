@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tethys - results</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+    <header class="top">
+        <div class="brand">tethys</div>
+        <nav class="nav">
+            <a href="/">Live</a>
+            <a href="/opening">Opening</a>
+            <a href="/results">Results</a>
+            <a href="/games">Games</a>
+            <a href="/download/all.txt">Download all (moves)</a>
+            <a href="/admin">Admin</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        <h1>Results</h1>
+
+        <div class="card" style="margin-bottom: 14px;">
+            <h2>Bradley–Terry ranking</h2>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Engine</th>
+                        <th>Score</th>
+                        <th>Games</th>
+                        <th>Strength</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Rankings}}
+                    <tr>
+                        <td>{{.Rank}}</td>
+                        <td>{{.Name}}</td>
+                        <td>{{printf "%.1f" .ScorePct}}%</td>
+                        <td>{{.Games}}</td>
+                        <td>
+                            <div class="result-bar">
+                                <div class="result-seg win" data-pct="{{printf "%.1f" .StrengthPct}}"></div>
+                            </div>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Matchup</th>
+                        <th>W / L / D</th>
+                        <th>Games</th>
+                        <th>Share</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Rows}}
+                    <tr>
+                        <td>{{.EngineA}} vs {{.EngineB}}</td>
+                        <td>
+                            <span class="badge win">W {{.Wins}}</span>
+                            <span class="badge loss">L {{.Losses}}</span>
+                            <span class="badge draw">D {{.Draws}}</span>
+                        </td>
+                        <td>{{.Total}}</td>
+                        <td>
+                            <div class="result-bar">
+                                <div class="result-seg win" data-pct="{{printf "%.1f" .WinPct}}"></div>
+                                <div class="result-seg draw" data-pct="{{printf "%.1f" .DrawPct}}"></div>
+                                <div class="result-seg loss" data-pct="{{printf "%.1f" .LossPct}}"></div>
+                            </div>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+        document.querySelectorAll('.result-seg').forEach((seg) => {
+            const pct = seg.dataset.pct;
+            if (pct) {
+                seg.style.width = `${pct}%`;
+            }
+        });
+    </script>
+</body>
+
+</html>

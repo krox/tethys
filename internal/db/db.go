@@ -65,7 +65,6 @@ func NewStore(db *sql.DB) *Store {
 	return &Store{db: db}
 }
 
-
 type GameRow struct {
 	ID         int64
 	PlayedAt   string
@@ -145,6 +144,14 @@ type GameMovesRow struct {
 	Result   string
 }
 
+type PairResult struct {
+	EngineA string
+	EngineB string
+	WinsA   int
+	WinsB   int
+	Draws   int
+}
+
 func (s *Store) ListFinishedGamesMoves(ctx context.Context, limit int) ([]GameMovesRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT moves_uci, COALESCE(result, '*')
@@ -180,6 +187,67 @@ func (s *Store) GameMoves(ctx context.Context, id int64) (moves, result string, 
 		result = "*"
 	}
 	return moves, result, nil
+}
+
+func (s *Store) ResultsByPair(ctx context.Context) ([]PairResult, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT engine_white, engine_black, COALESCE(result, '*') as result, COUNT(*)
+		FROM games
+		GROUP BY engine_white, engine_black, result
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := make(map[[2]string]*PairResult)
+	for rows.Next() {
+		var white, black, result string
+		var count int
+		if err := rows.Scan(&white, &black, &result, &count); err != nil {
+			return nil, err
+		}
+		if result != "1-0" && result != "0-1" && result != "1/2-1/2" {
+			continue
+		}
+		a, b := white, black
+		swap := false
+		if a > b {
+			a, b = b, a
+			swap = true
+		}
+		key := [2]string{a, b}
+		entry, ok := counts[key]
+		if !ok {
+			entry = &PairResult{EngineA: a, EngineB: b}
+			counts[key] = entry
+		}
+		switch result {
+		case "1-0":
+			if swap {
+				entry.WinsB += count
+			} else {
+				entry.WinsA += count
+			}
+		case "0-1":
+			if swap {
+				entry.WinsA += count
+			} else {
+				entry.WinsB += count
+			}
+		case "1/2-1/2":
+			entry.Draws += count
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	results := make([]PairResult, 0, len(counts))
+	for _, entry := range counts {
+		results = append(results, *entry)
+	}
+	return results, nil
 }
 
 // AllFinishedMovesLines returns one line per game: "<moves> <result>".

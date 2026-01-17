@@ -329,3 +329,50 @@ button:hover {
     color: var(--muted);
     font-size: 13px;
 }
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+
+.badge.win {
+    background: rgba(34, 197, 94, 0.18);
+    color: #86efac;
+}
+
+.badge.loss {
+    background: rgba(239, 68, 68, 0.18);
+    color: #fca5a5;
+}
+
+.badge.draw {
+    background: rgba(148, 163, 184, 0.2);
+    color: #cbd5f5;
+}
+
+.result-bar {
+    display: flex;
+    height: 10px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.08);
+    min-width: 120px;
+}
+
+.result-seg.win {
+    background: rgba(34, 197, 94, 0.75);
+}
+
+.result-seg.loss {
+    background: rgba(239, 68, 68, 0.75);
+}
+
+.result-seg.draw {
+    background: rgba(148, 163, 184, 0.75);
+}
