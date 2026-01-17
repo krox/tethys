@@ -22,12 +22,19 @@ type App struct {
 	runner *engine.Runner
 	mux    *http.ServeMux
 
+	adminToken string
+
 	closeOnce sync.Once
 }
 
 func New(cfg config.Config) (*App, error) {
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
+	}
+
+	adminToken, _, err := loadOrInitAdminToken(cfg.DataDir)
+	if err != nil {
+		return nil, err
 	}
 
 	sqlDB, err := db.Open(cfg.GamesDBPath)
@@ -54,20 +61,25 @@ func New(cfg config.Config) (*App, error) {
 	r := engine.NewRunner(gameStore, configStore, b)
 	r.Start(context.Background())
 
-	h := web.NewHandler(cfg, gameStore, configStore, r, b)
+	h := web.NewHandler(gameStore, configStore, r, b, adminToken)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
 	return &App{
-		cfg:    cfg,
-		db:     sqlDB,
-		runner: r,
-		mux:    mux,
+		cfg:        cfg,
+		db:         sqlDB,
+		runner:     r,
+		mux:        mux,
+		adminToken: adminToken,
 	}, nil
 }
 
 func (a *App) Router() http.Handler {
 	return a.mux
+}
+
+func (a *App) AdminToken() string {
+	return a.adminToken
 }
 
 func (a *App) Close() {
