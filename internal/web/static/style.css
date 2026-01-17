@@ -16,6 +16,7 @@ body {
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial;
     background: var(--bg);
     color: var(--text);
+    overflow-y: scroll;
 }
 
 a {
@@ -43,6 +44,46 @@ a:hover {
     letter-spacing: 0.5px;
 }
 
+.shell {
+    display: flex;
+    align-items: flex-start;
+}
+
+.sidebar {
+    width: 220px;
+    padding: 18px 12px 18px 18px;
+    border-right: 1px solid var(--border);
+    min-height: calc(100vh - 58px);
+    position: sticky;
+    top: 58px;
+    background: rgba(11, 15, 20, 0.95);
+}
+
+.side-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.side-nav a,
+.side-nav .linkish {
+    color: var(--muted);
+}
+
+.side-nav a.active {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.side-nav a:hover,
+.side-nav .linkish:hover {
+    color: var(--text);
+}
+
+.side-nav form {
+    margin-top: 8px;
+}
+
 .nav a {
     margin-left: 14px;
     color: var(--muted);
@@ -56,6 +97,7 @@ a:hover {
     max-width: 980px;
     margin: 0 auto;
     padding: 18px;
+    flex: 1;
 }
 
 
@@ -75,6 +117,29 @@ a:hover {
 @media (max-width: 900px) {
     .grid {
         grid-template-columns: 1fr;
+    }
+
+    .shell {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        position: static;
+        width: auto;
+        min-height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+        padding: 12px 18px;
+    }
+
+    .side-nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .side-nav form {
+        margin-top: 0;
     }
 }
 

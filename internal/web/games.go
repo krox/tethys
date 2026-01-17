@@ -79,7 +79,11 @@ func (h *Handler) handleGames(w http.ResponseWriter, r *http.Request) {
 			seen[key] = true
 		}
 	}
-	_ = h.tpl.ExecuteTemplate(w, "games.html", map[string]any{"Rows": rows})
+	_ = h.tpl.ExecuteTemplate(w, "games.html", map[string]any{
+		"Rows":    rows,
+		"IsAdmin": h.isAdminRequest(w, r),
+		"Page":    "games",
+	})
 }
 
 func (h *Handler) handleMatchupMoves(w http.ResponseWriter, r *http.Request) {
@@ -166,15 +170,4 @@ func (h *Handler) handleGameMoves(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=game-%d.txt", id))
 	_, _ = w.Write([]byte(line + "\n"))
-}
-
-func (h *Handler) handleAllMoves(w http.ResponseWriter, r *http.Request) {
-	lines, err := h.store.AllFinishedMovesLines(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Content-Disposition", "attachment; filename=tethys-all.txt")
-	_, _ = w.Write([]byte(lines))
 }

@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>tethys - admin login</title>
+    <title>tethys - admin</title>
     <link rel="stylesheet" href="/static/style.css" />
 </head>
 
@@ -29,11 +29,28 @@
         <form method="post" action="/admin/login" class="card">
             <label>Password</label>
             <input type="password" name="password" autofocus />
-            <div class="row">
-                <button type="submit">Login</button>
-            </div>
-        </form>
-    </main>
-</body>
+            <header class="top">
+                <div class="brand">tethys</div>
+            </header>
 
-</html>
+            <div class="shell">
+                <aside class="sidebar">
+                    <nav class="side-nav">
+                        <a href="/">Live View</a>
+                        <a href="/opening">Opening Explorer</a>
+                        <a href="/results">Ranking</a>
+                        <a href="/games">Game Database</a>
+                        <a href="/admin/settings">Global Settings</a>
+                        <a href="/admin/matches">Match Settings</a>
+                        <a href="/admin/engines">Engine Settings</a>
+                    </nav>
+                </aside>
+
+                <main class="container">
+                    <h1>Admin</h1>
+
+                    <div class="card">
+                        <p class="hint">Admin access now uses the startup token URL.</p>
+                    </div>
+                </main>
+            </div>

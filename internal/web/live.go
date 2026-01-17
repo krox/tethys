@@ -6,7 +6,10 @@ import (
 )
 
 func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
-	_ = h.tpl.ExecuteTemplate(w, "index.html", map[string]any{})
+	_ = h.tpl.ExecuteTemplate(w, "index.html", map[string]any{
+		"IsAdmin": h.isAdminRequest(w, r),
+		"Page":    "live",
+	})
 }
 
 func (h *Handler) handleLiveFragment(w http.ResponseWriter, r *http.Request) {

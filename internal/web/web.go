@@ -59,7 +59,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /games/matchup.txt", h.handleMatchupMoves)
 	mux.HandleFunc("GET /games/", h.handleGameMoves) // /games/{id}.txt
 	mux.HandleFunc("POST /games/delete", h.requireAdmin(h.handleMatchupDelete))
-	mux.HandleFunc("GET /download/all.txt", h.handleAllMoves)
 
 	mux.HandleFunc("GET /admin", h.requireAdmin(h.handleAdminRoot))
 	mux.HandleFunc("GET /admin/settings", h.requireAdmin(h.handleAdminSettings))

@@ -63,7 +63,12 @@ func (h *Handler) handleResults(w http.ResponseWriter, r *http.Request) {
 		}
 		return view[i].Total > view[j].Total
 	})
-	_ = h.tpl.ExecuteTemplate(w, "results.html", map[string]any{"Rows": view, "Rankings": rankings})
+	_ = h.tpl.ExecuteTemplate(w, "results.html", map[string]any{
+		"Rows":     view,
+		"Rankings": rankings,
+		"IsAdmin":  h.isAdminRequest(w, r),
+		"Page":     "ranking",
+	})
 }
 
 func computeBradleyTerry(rows []db.PairResult) []RankingRow {

@@ -4,33 +4,36 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>tethys - match setup</title>
+    <title>tethys - match settings</title>
     <link rel="stylesheet" href="/static/style.css" />
 </head>
 
 <body>
     <header class="top">
         <div class="brand">tethys</div>
-        <nav class="nav">
-            <a href="/">Live</a>
-            <a href="/opening">Opening</a>
-            <a href="/results">Results</a>
-            <a href="/games">Games</a>
-            <a href="/download/all.txt">Download all (moves)</a>
-            <a href="/admin/settings">Game settings</a>
-            <a href="/admin/matches">Match setup</a>
-            <a href="/admin/engines">Engines</a>
-            <form method="post" action="/admin/logout" style="display:inline">
-                <button type="submit" class="linkish">Logout</button>
-            </form>
-        </nav>
     </header>
 
-    <main class="container">
-        <h1>Match setup</h1>
+    <div class="shell">
+        <aside class="sidebar">
+            <nav class="side-nav">
+                <a href="/" {{if eq .Page "live"}}class="active"{{end}}>Live View</a>
+                <a href="/opening" {{if eq .Page "opening"}}class="active"{{end}}>Opening Explorer</a>
+                <a href="/results" {{if eq .Page "ranking"}}class="active"{{end}}>Ranking</a>
+                <a href="/games" {{if eq .Page "games"}}class="active"{{end}}>Game Database</a>
+                <a href="/admin/settings" {{if eq .Page "settings"}}class="active"{{end}}>Global Settings</a>
+                <a href="/admin/matches" {{if eq .Page "matches"}}class="active"{{end}}>Match Settings</a>
+                <a href="/admin/engines" {{if eq .Page "engines"}}class="active"{{end}}>Engine Settings</a>
+                <form method="post" action="/admin/logout">
+                    <button type="submit" class="linkish">Logout</button>
+                </form>
+            </nav>
+        </aside>
 
-        <div class="card">
-            <form method="post" action="/admin/matches" class="form">
+        <main class="container">
+            <h1>Match Settings</h1>
+
+            <div class="card">
+                <form method="post" action="/admin/matches" class="form">
                 <input type="hidden" name="pair_count" value="{{.PairCount}}" />
                 <table class="table matrix-table">
                     <thead>
@@ -63,12 +66,13 @@
                         {{end}}
                     </tbody>
                 </table>
-                <div class="row">
-                    <button type="submit">Save</button>
-                </div>
-            </form>
-        </div>
-    </main>
+                    <div class="row">
+                        <button type="submit">Save</button>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
 
     <script>
         (function () {

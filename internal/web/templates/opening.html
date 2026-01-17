@@ -11,20 +11,31 @@
 <body>
     <header class="top">
         <div class="brand">tethys</div>
-        <nav class="nav">
-            <a href="/">Live</a>
-            <a href="/opening">Opening</a>
-            <a href="/results">Results</a>
-            <a href="/games">Games</a>
-            <a href="/download/all.txt">Download all (moves)</a>
-            <a href="/admin">Admin</a>
-        </nav>
     </header>
 
-    <main class="container">
-        <h1>Opening explorer</h1>
-        <div id="opening" class="card" data-url="/opening/fragment">Loading…</div>
-    </main>
+    <div class="shell">
+        <aside class="sidebar">
+            <nav class="side-nav">
+                <a href="/" {{if eq .Page "live"}}class="active"{{end}}>Live View</a>
+                <a href="/opening" {{if eq .Page "opening"}}class="active"{{end}}>Opening Explorer</a>
+                <a href="/results" {{if eq .Page "ranking"}}class="active"{{end}}>Ranking</a>
+                <a href="/games" {{if eq .Page "games"}}class="active"{{end}}>Game Database</a>
+                {{if .IsAdmin}}
+                <a href="/admin/settings" {{if eq .Page "settings"}}class="active"{{end}}>Global Settings</a>
+                <a href="/admin/matches" {{if eq .Page "matches"}}class="active"{{end}}>Match Settings</a>
+                <a href="/admin/engines" {{if eq .Page "engines"}}class="active"{{end}}>Engine Settings</a>
+                <form method="post" action="/admin/logout">
+                    <button type="submit" class="linkish">Logout</button>
+                </form>
+                {{end}}
+            </nav>
+        </aside>
+
+        <main class="container">
+            <h1>Opening Explorer</h1>
+            <div id="opening" class="card" data-url="/opening/fragment">Loading…</div>
+        </main>
+    </div>
 
     <script>
         async function refreshOpening() {

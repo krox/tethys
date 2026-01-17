@@ -4,30 +4,33 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>tethys - engines</title>
+    <title>tethys - engine settings</title>
     <link rel="stylesheet" href="/static/style.css" />
 </head>
 
 <body>
     <header class="top">
         <div class="brand">tethys</div>
-        <nav class="nav">
-            <a href="/">Live</a>
-            <a href="/opening">Opening</a>
-            <a href="/results">Results</a>
-            <a href="/games">Games</a>
-            <a href="/download/all.txt">Download all (moves)</a>
-            <a href="/admin/settings">Game settings</a>
-            <a href="/admin/matches">Match setup</a>
-            <a href="/admin/engines">Engines</a>
-            <form method="post" action="/admin/logout" style="display:inline">
-                <button type="submit" class="linkish">Logout</button>
-            </form>
-        </nav>
     </header>
 
-    <main class="container">
-        <h1>Engines</h1>
+    <div class="shell">
+        <aside class="sidebar">
+            <nav class="side-nav">
+                <a href="/" {{if eq .Page "live"}}class="active"{{end}}>Live View</a>
+                <a href="/opening" {{if eq .Page "opening"}}class="active"{{end}}>Opening Explorer</a>
+                <a href="/results" {{if eq .Page "ranking"}}class="active"{{end}}>Ranking</a>
+                <a href="/games" {{if eq .Page "games"}}class="active"{{end}}>Game Database</a>
+                <a href="/admin/settings" {{if eq .Page "settings"}}class="active"{{end}}>Global Settings</a>
+                <a href="/admin/matches" {{if eq .Page "matches"}}class="active"{{end}}>Match Settings</a>
+                <a href="/admin/engines" {{if eq .Page "engines"}}class="active"{{end}}>Engine Settings</a>
+                <form method="post" action="/admin/logout">
+                    <button type="submit" class="linkish">Logout</button>
+                </form>
+            </nav>
+        </aside>
+
+        <main class="container">
+            <h1>Engine Settings</h1>
 
         <div class="card">
             <form method="post" action="/admin/engines" class="form">
@@ -75,9 +78,10 @@
             </form>
         </div>
 
-        <p class="hint">Notes: engine args are split on spaces (no shell quoting). Init commands are sent as-is, then
-            `isready`.</p>
-    </main>
+            <p class="hint">Notes: engine args are split on spaces (no shell quoting). Init commands are sent as-is, then
+                `isready`.</p>
+        </main>
+    </div>
 
     <script>
         (function () {

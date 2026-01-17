@@ -56,7 +56,11 @@ func (h *Handler) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_ = h.tpl.ExecuteTemplate(w, "admin_settings.html", map[string]any{"Cfg": cfg})
+	_ = h.tpl.ExecuteTemplate(w, "admin_settings.html", map[string]any{
+		"Cfg":     cfg,
+		"IsAdmin": true,
+		"Page":    "settings",
+	})
 }
 
 func (h *Handler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request) {
@@ -122,6 +126,8 @@ func (h *Handler) handleAdminMatches(w http.ResponseWriter, r *http.Request) {
 		"Engines":   order,
 		"Strengths": strengths,
 		"PairCount": matchCellCount(rows),
+		"IsAdmin":   true,
+		"Page":      "matches",
 	})
 }
 
@@ -150,6 +156,8 @@ func (h *Handler) handleAdminEngines(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := buildAdminView(cfg, nil)
+	view.IsAdmin = true
+	view.Page = "engines"
 	_ = h.tpl.ExecuteTemplate(w, "admin_engines.html", view)
 }
 
@@ -168,11 +176,15 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		view.Cfg = cfg
 		view.Cfg.Engines = engines
+		view.IsAdmin = true
+		view.Page = "engines"
 		_ = h.tpl.ExecuteTemplate(w, "admin_engines.html", view)
 		return
 	}
 	if errMap := testEngines(r.Context(), engines); len(errMap) > 0 {
 		view = buildAdminView(configstore.Config{Engines: engines, EnabledPairs: cfg.EnabledPairs}, errMap)
+		view.IsAdmin = true
+		view.Page = "engines"
 		_ = h.tpl.ExecuteTemplate(w, "admin_engines.html", view)
 		return
 	}
@@ -189,6 +201,24 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 func (h *Handler) handleAdminRestart(w http.ResponseWriter, r *http.Request) {
 	h.r.Restart()
 	http.Redirect(w, r, "/admin", http.StatusSeeOther)
+}
+
+func (h *Handler) isAdminRequest(w http.ResponseWriter, r *http.Request) bool {
+	if h.adminToken == "" {
+		return false
+	}
+	if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
+		if tokensEqual(token, h.adminToken) {
+			h.setAdminCookie(w)
+			return true
+		}
+		return false
+	}
+	cookie, err := r.Cookie("tethys_admin_token")
+	if err != nil || cookie.Value == "" {
+		return false
+	}
+	return tokensEqual(cookie.Value, h.adminToken)
 }
 
 func (h *Handler) setAdminCookie(w http.ResponseWriter) {
@@ -229,6 +259,8 @@ type AdminView struct {
 	Cfg     configstore.Config
 	Engines []EngineView
 	Pairs   []PairView
+	IsAdmin bool
+	Page    string
 }
 
 func buildAdminView(cfg configstore.Config, errMap map[int]string) AdminView {
