@@ -217,6 +217,12 @@ a:hover {
     text-align: left;
 }
 
+.table.compact th,
+.table.compact td {
+    padding: 6px 8px;
+    font-size: 12px;
+}
+
 .table th {
     color: var(--muted);
     font-weight: 600;
@@ -406,6 +412,24 @@ button.danger:hover {
 
 .hint {
     color: var(--muted);
+}
+
+.matchup-details {
+    display: inline-block;
+}
+
+.matchup-details summary {
+    cursor: pointer;
+    color: var(--muted);
+    list-style: none;
+}
+
+.matchup-details summary:hover {
+    color: var(--text);
+}
+
+.matchup-details summary::-webkit-details-marker {
+    display: none;
 }
 
 .opening-summary {

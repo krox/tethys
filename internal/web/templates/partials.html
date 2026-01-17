@@ -1,0 +1,7 @@
+{{define "result_bar"}}
+<div class="result-bar" title="W {{.Wins}} / D {{.Draws}} / L {{.Losses}}">
+    <div class="result-seg win" data-pct="{{printf " %.1f" .WinPct}}"></div>
+    <div class="result-seg draw" data-pct="{{printf " %.1f" .DrawPct}}"></div>
+    <div class="result-seg loss" data-pct="{{printf " %.1f" .LossPct}}"></div>
+</div>
+{{end}}

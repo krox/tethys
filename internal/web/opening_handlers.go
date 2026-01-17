@@ -3,7 +3,7 @@ package web
 import "net/http"
 
 func (h *Handler) handleOpeningPage(w http.ResponseWriter, r *http.Request) {
-	_ = h.tpl.ExecuteTemplate(w, "opening.html", map[string]any{
+	_ = h.tpl.ExecuteTemplate(w, "opening_explorer.html", map[string]any{
 		"IsAdmin": h.isAdminRequest(w, r),
 		"Page":    "opening",
 	})

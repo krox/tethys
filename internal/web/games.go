@@ -79,7 +79,7 @@ func (h *Handler) handleGames(w http.ResponseWriter, r *http.Request) {
 			seen[key] = true
 		}
 	}
-	_ = h.tpl.ExecuteTemplate(w, "games.html", map[string]any{
+	_ = h.tpl.ExecuteTemplate(w, "game_database.html", map[string]any{
 		"Rows":    rows,
 		"IsAdmin": h.isAdminRequest(w, r),
 		"Page":    "games",

@@ -56,7 +56,7 @@ func (h *Handler) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_ = h.tpl.ExecuteTemplate(w, "admin_settings.html", map[string]any{
+	_ = h.tpl.ExecuteTemplate(w, "global_settings.html", map[string]any{
 		"Cfg":     cfg,
 		"IsAdmin": true,
 		"Page":    "settings",
@@ -120,7 +120,7 @@ func (h *Handler) handleAdminMatches(w http.ResponseWriter, r *http.Request) {
 	order := matchOrder(cfg, ranking)
 	rows := buildMatchRows(cfg, order)
 	strengths := matchStrengths(ranking, cfg)
-	_ = h.tpl.ExecuteTemplate(w, "admin_matches.html", map[string]any{
+	_ = h.tpl.ExecuteTemplate(w, "match_settings.html", map[string]any{
 		"Cfg":       cfg,
 		"Rows":      rows,
 		"Engines":   order,
@@ -158,7 +158,7 @@ func (h *Handler) handleAdminEngines(w http.ResponseWriter, r *http.Request) {
 	view := buildAdminView(cfg, nil)
 	view.IsAdmin = true
 	view.Page = "engines"
-	_ = h.tpl.ExecuteTemplate(w, "admin_engines.html", view)
+	_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 }
 
 func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request) {
@@ -178,14 +178,14 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 		view.Cfg.Engines = engines
 		view.IsAdmin = true
 		view.Page = "engines"
-		_ = h.tpl.ExecuteTemplate(w, "admin_engines.html", view)
+		_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 		return
 	}
 	if errMap := testEngines(r.Context(), engines); len(errMap) > 0 {
 		view = buildAdminView(configstore.Config{Engines: engines, EnabledPairs: cfg.EnabledPairs}, errMap)
 		view.IsAdmin = true
 		view.Page = "engines"
-		_ = h.tpl.ExecuteTemplate(w, "admin_engines.html", view)
+		_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 		return
 	}
 

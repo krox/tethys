@@ -6,7 +6,7 @@ import (
 )
 
 func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
-	_ = h.tpl.ExecuteTemplate(w, "index.html", map[string]any{
+	_ = h.tpl.ExecuteTemplate(w, "live_view.html", map[string]any{
 		"IsAdmin": h.isAdminRequest(w, r),
 		"Page":    "live",
 	})

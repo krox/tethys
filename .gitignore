@@ -1,4 +1,5 @@
 /data/
+/deploy/
 *.db
 *.db-shm
 *.db-wal

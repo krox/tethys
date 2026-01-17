@@ -16,13 +16,13 @@
     <div class="shell">
         <aside class="sidebar">
             <nav class="side-nav">
-                <a href="/" {{if eq .Page "live"}}class="active"{{end}}>Live View</a>
-                <a href="/opening" {{if eq .Page "opening"}}class="active"{{end}}>Opening Explorer</a>
-                <a href="/results" {{if eq .Page "ranking"}}class="active"{{end}}>Ranking</a>
-                <a href="/games" {{if eq .Page "games"}}class="active"{{end}}>Game Database</a>
-                <a href="/admin/settings" {{if eq .Page "settings"}}class="active"{{end}}>Global Settings</a>
-                <a href="/admin/matches" {{if eq .Page "matches"}}class="active"{{end}}>Match Settings</a>
-                <a href="/admin/engines" {{if eq .Page "engines"}}class="active"{{end}}>Engine Settings</a>
+                <a href="/" {{if eq .Page "live" }}class="active" {{end}}>Live View</a>
+                <a href="/opening" {{if eq .Page "opening" }}class="active" {{end}}>Opening Explorer</a>
+                <a href="/results" {{if eq .Page "ranking" }}class="active" {{end}}>Ranking</a>
+                <a href="/games" {{if eq .Page "games" }}class="active" {{end}}>Game Database</a>
+                <a href="/admin/settings" {{if eq .Page "settings" }}class="active" {{end}}>Global Settings</a>
+                <a href="/admin/matches" {{if eq .Page "matches" }}class="active" {{end}}>Match Settings</a>
+                <a href="/admin/engines" {{if eq .Page "engines" }}class="active" {{end}}>Engine Settings</a>
                 <form method="post" action="/admin/logout">
                     <button type="submit" class="linkish">Logout</button>
                 </form>
@@ -32,53 +32,55 @@
         <main class="container">
             <h1>Engine Settings</h1>
 
-        <div class="card">
-            <form method="post" action="/admin/engines" class="form">
-                <input type="hidden" name="engine_count" id="engine_count" value="{{len .Engines}}" />
-                <div id="engine_list">
-                    {{range .Engines}}
-                    <div class="engine-card" data-index="{{.Index}}">
-                        <div class="engine-head">
-                            {{if .Error}}<span class="error">{{.Error}}</span>{{end}}
-                            <div class="engine-actions">
-                                <button type="button" class="duplicate-engine">Duplicate</button>
-                                <button type="button" class="delete-engine">Delete</button>
+            <div class="card">
+                <form method="post" action="/admin/engines" class="form">
+                    <input type="hidden" name="engine_count" id="engine_count" value="{{len .Engines}}" />
+                    <div id="engine_list">
+                        {{range .Engines}}
+                        <div class="engine-card" data-index="{{.Index}}">
+                            <div class="engine-head">
+                                {{if .Error}}<span class="error">{{.Error}}</span>{{end}}
+                                <div class="engine-actions">
+                                    <button type="button" class="duplicate-engine">Duplicate</button>
+                                    <button type="button" class="delete-engine">Delete</button>
+                                </div>
+                            </div>
+                            <div class="engine-grid">
+                                <div>
+                                    <label>Name</label>
+                                    <input name="engine_name_{{.Index}}" data-field="name" value="{{.Name}}"
+                                        placeholder="unique name" />
+                                </div>
+                                <div>
+                                    <label>Path</label>
+                                    <input name="engine_path_{{.Index}}" data-field="path" value="{{.Path}}"
+                                        placeholder="/usr/games/stockfish" />
+                                </div>
+                                <div>
+                                    <label>Args</label>
+                                    <input name="engine_args_{{.Index}}" data-field="args" value="{{.Args}}"
+                                        placeholder="" />
+                                </div>
+                                <div class="engine-init">
+                                    <label>Init commands (one per line)</label>
+                                    <textarea name="engine_init_{{.Index}}" data-field="init"
+                                        rows="4">{{.Init}}</textarea>
+                                </div>
                             </div>
                         </div>
-                        <div class="engine-grid">
-                            <div>
-                                <label>Name</label>
-                                <input name="engine_name_{{.Index}}" data-field="name" value="{{.Name}}"
-                                    placeholder="unique name" />
-                            </div>
-                            <div>
-                                <label>Path</label>
-                                <input name="engine_path_{{.Index}}" data-field="path" value="{{.Path}}"
-                                    placeholder="/usr/games/stockfish" />
-                            </div>
-                            <div>
-                                <label>Args</label>
-                                <input name="engine_args_{{.Index}}" data-field="args" value="{{.Args}}"
-                                    placeholder="" />
-                            </div>
-                            <div class="engine-init">
-                                <label>Init commands (one per line)</label>
-                                <textarea name="engine_init_{{.Index}}" data-field="init" rows="4">{{.Init}}</textarea>
-                            </div>
-                        </div>
+                        {{end}}
                     </div>
-                    {{end}}
-                </div>
-                <div class="row">
-                    <button type="button" id="add_engine">Add engine</button>
-                </div>
-                <div class="row">
-                    <button type="submit">Save</button>
-                </div>
-            </form>
-        </div>
+                    <div class="row">
+                        <button type="button" id="add_engine">Add engine</button>
+                    </div>
+                    <div class="row">
+                        <button type="submit">Save</button>
+                    </div>
+                </form>
+            </div>
 
-            <p class="hint">Notes: engine args are split on spaces (no shell quoting). Init commands are sent as-is, then
+            <p class="hint">Notes: engine args are split on spaces (no shell quoting). Init commands are sent as-is,
+                then
                 `isready`.</p>
         </main>
     </div>

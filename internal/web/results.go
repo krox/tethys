@@ -8,18 +8,6 @@ import (
 	"tethys/internal/db"
 )
 
-type ResultsRow struct {
-	EngineA string
-	EngineB string
-	Wins    int
-	Losses  int
-	Draws   int
-	Total   int
-	WinPct  float64
-	LossPct float64
-	DrawPct float64
-}
-
 type RankingRow struct {
 	Rank        int
 	Name        string
@@ -29,6 +17,22 @@ type RankingRow struct {
 	StrengthPct float64
 }
 
+type MatchupBreakdown struct {
+	Opponent string
+	Wins     int
+	Losses   int
+	Draws    int
+	Total    int
+	WinPct   float64
+	LossPct  float64
+	DrawPct  float64
+}
+
+type RankingView struct {
+	RankingRow
+	Matchups []MatchupBreakdown
+}
+
 func (h *Handler) handleResults(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.store.ResultsByPair(r.Context())
 	if err != nil {
@@ -36,39 +40,57 @@ func (h *Handler) handleResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rankings := computeBradleyTerry(rows)
-	view := make([]ResultsRow, 0, len(rows))
+	matchupsByEngine := buildMatchupsByEngine(rows)
+	view := make([]RankingView, 0, len(rankings))
+	for _, r := range rankings {
+		matchups := matchupsByEngine[r.Name]
+		sort.Slice(matchups, func(i, j int) bool {
+			if matchups[i].Total == matchups[j].Total {
+				return matchups[i].Opponent < matchups[j].Opponent
+			}
+			return matchups[i].Total > matchups[j].Total
+		})
+		view = append(view, RankingView{RankingRow: r, Matchups: matchups})
+	}
+	_ = h.tpl.ExecuteTemplate(w, "ranking.html", map[string]any{
+		"Rankings": view,
+		"IsAdmin":  h.isAdminRequest(w, r),
+		"Page":     "ranking",
+	})
+}
+
+func buildMatchupsByEngine(rows []db.PairResult) map[string][]MatchupBreakdown {
+	matchups := make(map[string][]MatchupBreakdown)
 	for _, row := range rows {
 		total := row.WinsA + row.WinsB + row.Draws
 		if total == 0 {
 			continue
 		}
-		view = append(view, ResultsRow{
-			EngineA: row.EngineA,
-			EngineB: row.EngineB,
-			Wins:    row.WinsA,
-			Losses:  row.WinsB,
-			Draws:   row.Draws,
-			Total:   total,
-			WinPct:  float64(row.WinsA) * 100 / float64(total),
-			LossPct: float64(row.WinsB) * 100 / float64(total),
-			DrawPct: float64(row.Draws) * 100 / float64(total),
+		matchups[row.EngineA] = append(matchups[row.EngineA], MatchupBreakdown{
+			Opponent: row.EngineB,
+			Wins:     row.WinsA,
+			Losses:   row.WinsB,
+			Draws:    row.Draws,
+			Total:    total,
+			WinPct:   float64(row.WinsA) * 100 / float64(total),
+			LossPct:  float64(row.WinsB) * 100 / float64(total),
+			DrawPct:  float64(row.Draws) * 100 / float64(total),
+		})
+		if row.EngineA == row.EngineB {
+			continue
+		}
+		matchups[row.EngineB] = append(matchups[row.EngineB], MatchupBreakdown{
+			Opponent: row.EngineA,
+			Wins:     row.WinsB,
+			Losses:   row.WinsA,
+			Draws:    row.Draws,
+			Total:    total,
+			WinPct:   float64(row.WinsB) * 100 / float64(total),
+			LossPct:  float64(row.WinsA) * 100 / float64(total),
+			DrawPct:  float64(row.Draws) * 100 / float64(total),
 		})
 	}
-	sort.Slice(view, func(i, j int) bool {
-		if view[i].Total == view[j].Total {
-			if view[i].EngineA == view[j].EngineA {
-				return view[i].EngineB < view[j].EngineB
-			}
-			return view[i].EngineA < view[j].EngineA
-		}
-		return view[i].Total > view[j].Total
-	})
-	_ = h.tpl.ExecuteTemplate(w, "results.html", map[string]any{
-		"Rows":     view,
-		"Rankings": rankings,
-		"IsAdmin":  h.isAdminRequest(w, r),
-		"Page":     "ranking",
-	})
+	return matchups
 }
 
 func computeBradleyTerry(rows []db.PairResult) []RankingRow {
