@@ -37,18 +37,18 @@ type SquareView struct {
 }
 
 type Runner struct {
-	store  *db.Store
-	config *configstore.Store
-	b      *Broadcaster
-	seq    int64
-	bookMu sync.Mutex
+	store    *db.Store
+	config   *configstore.Store
+	b        *Broadcaster
+	seq      int64
+	bookMu   sync.Mutex
 	bookPath string
 	bookMod  time.Time
 	book     *book.Book
 
-	mu    sync.RWMutex
-	live  LiveState
-	stop  chan struct{}
+	mu      sync.RWMutex
+	live    LiveState
+	stop    chan struct{}
 	restart chan struct{}
 
 	runningMu sync.Mutex
@@ -63,7 +63,7 @@ func NewRunner(store *db.Store, config *configstore.Store, b *Broadcaster) *Runn
 		b:       b,
 		stop:    make(chan struct{}),
 		restart: make(chan struct{}, 1),
-		live: LiveState{Status: "starting", FEN: start.String(), Board: boardFromPosition(start)},
+		live:    LiveState{Status: "starting", FEN: start.String(), Board: boardFromPosition(start)},
 	}
 }
 
@@ -396,7 +396,6 @@ func outcomeToResult(g *chess.Game) (result, termination string) {
 	termination = method.String()
 	return result, termination
 }
-
 
 func engineDisplayName(path string, fallback string) string {
 	base := filepath.Base(path)
