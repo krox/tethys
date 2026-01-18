@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -168,6 +169,12 @@ type MatchupCount struct {
 	Count      int
 }
 
+type ResultSummary struct {
+	Result      string
+	Termination string
+	Count       int
+}
+
 func (s *Store) ListFinishedGamesMoves(ctx context.Context, limit int) ([]GameMovesRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT moves_uci, COALESCE(result, '*')
@@ -175,6 +182,28 @@ func (s *Store) ListFinishedGamesMoves(ctx context.Context, limit int) ([]GameMo
 		ORDER BY id DESC
 		LIMIT ?
 	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []GameMovesRow
+	for rows.Next() {
+		var row GameMovesRow
+		if err := rows.Scan(&row.MovesUCI, &row.Result); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) ListAllMovesWithResult(ctx context.Context) ([]GameMovesRow, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT moves_uci, COALESCE(result, '*')
+		FROM games
+		ORDER BY id ASC
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -350,6 +379,28 @@ func (s *Store) ListMatchupCounts(ctx context.Context) ([]MatchupCount, error) {
 	return out, rows.Err()
 }
 
+func (s *Store) ListResultSummaries(ctx context.Context) ([]ResultSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT COALESCE(result, '*') as result, COALESCE(termination, '') as termination, COUNT(*)
+		FROM games
+		GROUP BY result, termination
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ResultSummary
+	for rows.Next() {
+		var row ResultSummary
+		if err := rows.Scan(&row.Result, &row.Termination, &row.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 // MatchupMovesLines returns one line per game for a specific matchup and movetime.
 func (s *Store) MatchupMovesLines(ctx context.Context, a, b string, movetimeMS int) (string, error) {
 	rows, err := s.db.QueryContext(ctx, `
@@ -383,6 +434,39 @@ func (s *Store) MatchupMovesLines(ctx context.Context, a, b string, movetimeMS i
 	return out, rows.Err()
 }
 
+// ResultMovesLines returns one line per game for a specific result/termination.
+func (s *Store) ResultMovesLines(ctx context.Context, result, termination string) (string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT moves_uci, result
+		FROM games
+		WHERE COALESCE(result, '*') = ? AND COALESCE(termination, '') = ?
+		ORDER BY id ASC
+	`, result, termination)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	out := ""
+	for rows.Next() {
+		var moves string
+		var res sql.NullString
+		if err := rows.Scan(&moves, &res); err != nil {
+			return "", err
+		}
+		lineResult := "*"
+		if res.Valid && res.String != "" {
+			lineResult = res.String
+		}
+		if moves != "" {
+			out += moves + " " + lineResult + "\n"
+		} else {
+			out += lineResult + "\n"
+		}
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) DeleteMatchupGames(ctx context.Context, a, b string, movetimeMS int) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `
 		DELETE FROM games
@@ -396,6 +480,110 @@ func (s *Store) DeleteMatchupGames(ctx context.Context, a, b string, movetimeMS 
 		return 0, err
 	}
 	return rows, nil
+}
+
+func (s *Store) DeleteResultGames(ctx context.Context, result, termination string) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `
+		DELETE FROM games
+		WHERE COALESCE(result, '*') = ? AND COALESCE(termination, '') = ?
+	`, result, termination)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return rows, nil
+}
+
+// OpeningMovesLines returns one line per game for a specific opening key (first 2 plies).
+func (s *Store) OpeningMovesLines(ctx context.Context, opening string) (string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT moves_uci, result
+		FROM games
+		ORDER BY id ASC
+	`)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	out := ""
+	for rows.Next() {
+		var moves string
+		var res sql.NullString
+		if err := rows.Scan(&moves, &res); err != nil {
+			return "", err
+		}
+		if openingKeyForMoves(moves) != opening {
+			continue
+		}
+		result := "*"
+		if res.Valid && res.String != "" {
+			result = res.String
+		}
+		if moves != "" {
+			out += moves + " " + result + "\n"
+		} else {
+			out += result + "\n"
+		}
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) DeleteOpeningGames(ctx context.Context, opening string) (int64, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, moves_uci
+		FROM games
+	`)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	ids := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		var moves string
+		if err := rows.Scan(&id, &moves); err != nil {
+			return 0, err
+		}
+		if openingKeyForMoves(moves) == opening {
+			ids = append(ids, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	deleted := int64(0)
+	for _, id := range ids {
+		res, err := s.db.ExecContext(ctx, `DELETE FROM games WHERE id = ?`, id)
+		if err != nil {
+			return deleted, err
+		}
+		count, err := res.RowsAffected()
+		if err != nil {
+			return deleted, err
+		}
+		deleted += count
+	}
+	return deleted, nil
+}
+
+func openingKeyForMoves(movesUCI string) string {
+	if strings.TrimSpace(movesUCI) == "" {
+		return "(no moves)"
+	}
+	parts := strings.Fields(movesUCI)
+	if len(parts) >= 2 {
+		return parts[0] + " " + parts[1]
+	}
+	return parts[0]
 }
 
 // AllFinishedMovesLines returns one line per game: "<moves> <result>".
