@@ -53,6 +53,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/live", h.handleLiveJSON)
 	mux.HandleFunc("GET /opening", h.handleOpeningPage)
 	mux.HandleFunc("GET /opening/fragment", h.handleOpeningFragment)
+	mux.HandleFunc("GET /book", h.handleBookExplorer)
 	mux.HandleFunc("GET /results", h.handleResults)
 
 	mux.HandleFunc("GET /games", h.handleGames)

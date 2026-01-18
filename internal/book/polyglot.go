@@ -15,6 +15,11 @@ type Book struct {
 	entries []entry
 }
 
+type MoveWeight struct {
+	UCI    string
+	Weight int
+}
+
 type entry struct {
 	key    uint64
 	move   uint16
@@ -76,6 +81,44 @@ func (b *Book) Lookup(pos *chess.Position) (string, bool) {
 		}
 	}
 	return decodeMove(choices[0].move), true
+}
+
+func (b *Book) Moves(pos *chess.Position) []MoveWeight {
+	if b == nil || len(b.entries) == 0 {
+		return nil
+	}
+	key := polyglotKey(pos)
+	idx := sort.Search(len(b.entries), func(i int) bool { return b.entries[i].key >= key })
+	if idx >= len(b.entries) || b.entries[idx].key != key {
+		return nil
+	}
+	end := idx
+	for end < len(b.entries) && b.entries[end].key == key {
+		end++
+	}
+
+	choices := b.entries[idx:end]
+	if len(choices) == 0 {
+		return nil
+	}
+
+	weights := make(map[string]int)
+	for _, c := range choices {
+		uci := decodeMove(c.move)
+		weights[uci] += int(c.weight)
+	}
+
+	out := make([]MoveWeight, 0, len(weights))
+	for uci, w := range weights {
+		out = append(out, MoveWeight{UCI: uci, Weight: w})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Weight == out[j].Weight {
+			return out[i].UCI < out[j].UCI
+		}
+		return out[i].Weight > out[j].Weight
+	})
+	return out
 }
 
 func decodeMove(m uint16) string {

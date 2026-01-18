@@ -111,11 +111,11 @@ func (h *Handler) handleGames(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = h.tpl.ExecuteTemplate(w, "game_database.html", map[string]any{
-		"Rows":       rows,
-		"ResultRows": buildResultRows(resultSummaries),
+		"Rows":        rows,
+		"ResultRows":  buildResultRows(resultSummaries),
 		"OpeningRows": openingRows,
-		"IsAdmin":    h.isAdminRequest(w, r),
-		"Page":       "games",
+		"IsAdmin":     h.isAdminRequest(w, r),
+		"Page":        "games",
 	})
 }
 
