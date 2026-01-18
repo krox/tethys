@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tethys - book explorer</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+    <header class="top">
+        <div class="brand">tethys</div>
+    </header>
+
+    <div class="shell">
+        <aside class="sidebar">
+            <nav class="side-nav">
+                <a href="/" {{if eq .Page "live" }}class="active" {{end}}>Live View</a>
+                <a href="/opening" {{if eq .Page "opening" }}class="active" {{end}}>Opening Explorer</a>
+                <a href="/book" {{if eq .Page "book" }}class="active" {{end}}>Book Explorer</a>
+                <a href="/results" {{if eq .Page "ranking" }}class="active" {{end}}>Ranking</a>
+                <a href="/games" {{if eq .Page "games" }}class="active" {{end}}>Game Database</a>
+                {{if .IsAdmin}}
+                <a href="/admin/settings" {{if eq .Page "settings" }}class="active" {{end}}>Global Settings</a>
+                <a href="/admin/matches" {{if eq .Page "matches" }}class="active" {{end}}>Match Settings</a>
+                <a href="/admin/engines" {{if eq .Page "engines" }}class="active" {{end}}>Engine Settings</a>
+                <form method="post" action="/admin/logout">
+                    <button type="submit" class="linkish">Logout</button>
+                </form>
+                {{end}}
+            </nav>
+        </aside>
+
+        <main class="container">
+            <h1>Book Explorer</h1>
+
+            {{if .Error}}
+            <div class="card">
+                <p class="error">{{.Error}}</p>
+            </div>
+            {{else}}
+            <div class="card" style="margin-bottom: 16px;">
+                <div class="grid">
+                    <div>
+                        <div class="kv"><span>Book</span><span class="mono">{{.BookPath}}</span></div>
+                        <div class="kv"><span>FEN</span><span class="mono">{{.FEN}}</span></div>
+                        <div class="row">
+                            <form method="get" action="/book" class="form" style="width:100%;">
+                                <label>Jump to FEN</label>
+                                <input name="fen" value="{{.FEN}}" />
+                                <div class="row">
+                                    <button type="submit">Go</button>
+                                    <a href="/book" class="linkish" style="padding:10px 0;">Reset</a>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    <div>
+                        <h3>Board</h3>
+                        <div class="board-wrap">
+                            <div class="board">
+                                {{range .Board}}
+                                <div class="rank">
+                                    {{range .}}
+                                    <div class="{{.Class}}">{{.Glyph}}</div>
+                                    {{end}}
+                                </div>
+                                {{end}}
+                            </div>
+                            <svg class="board-arrows" viewBox="0 0 8 8" preserveAspectRatio="none">
+                                <defs>
+                                    <marker id="arrowhead" markerWidth="4" markerHeight="4" refX="3" refY="2"
+                                        orient="auto" markerUnits="strokeWidth">
+                                        <path d="M0,0 L4,2 L0,4 z" fill="rgba(125, 211, 252, 0.9)"></path>
+                                    </marker>
+                                </defs>
+                                {{range .Arrows}}
+                                <line class="arrow-line" x1="{{printf " %.3f" .X1}}" y1="{{printf " %.3f" .Y1}}"
+                                    x2="{{printf " %.3f" .X2}}" y2="{{printf " %.3f" .Y2}}"
+                                    stroke="rgba(125, 211, 252, {{printf " %.2f" .Opacity}})"
+                                    marker-end="url(#arrowhead)">
+                                </line>
+                                {{end}}
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Moves</h2>
+                {{if .Moves}}
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Move</th>
+                            <th>Weight</th>
+                            <th>Share</th>
+                            <th>Explore</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Moves}}
+                        <tr>
+                            <td>{{if .SAN}}{{.SAN}}{{else}}{{.UCI}}{{end}}</td>
+                            <td>{{.Weight}}</td>
+                            <td>{{printf "%.1f" .Percent}}%</td>
+                            <td>
+                                {{if .NextFEN}}
+                                <a href="/book?fen={{.NextFEN | urlquery}}">open</a>
+                                {{else}}
+                                —
+                                {{end}}
+                            </td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+                {{else}}
+                <p class="hint">No book moves for this position.</p>
+                {{end}}
+            </div>
+            {{end}}
+        </main>
+    </div>
+</body>
+
+</html>
