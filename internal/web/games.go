@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/notnil/chess"
+
 	"tethys/internal/db"
 )
 
@@ -48,6 +50,27 @@ type OpeningRow struct {
 	DrawPct float64
 }
 
+type SearchView struct {
+	Engine      string
+	White       string
+	Black       string
+	AllowSwap   bool
+	Movetime    string
+	Result      string
+	Termination string
+	Limit       int
+	Total       int
+	Rows        []SearchRow
+	Engines     []string
+	Results     []string
+	Terminations []string
+}
+
+type SearchRow struct {
+	db.GameDetail
+	Plies int
+}
+
 func (h *Handler) handleGames(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	matchups, err := h.store.ListMatchupSummaries(ctx)
@@ -61,6 +84,11 @@ func (h *Handler) handleGames(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	openingRows, err := buildOpeningRows(ctx, h.store)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	searchView, err := buildSearchView(ctx, h.store, r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -114,9 +142,83 @@ func (h *Handler) handleGames(w http.ResponseWriter, r *http.Request) {
 		"Rows":        rows,
 		"ResultRows":  buildResultRows(resultSummaries),
 		"OpeningRows": openingRows,
+		"Search":      searchView,
 		"IsAdmin":     h.isAdminRequest(w, r),
 		"Page":        "games",
 	})
+}
+
+func buildSearchView(ctx context.Context, store *db.Store, r *http.Request) (SearchView, error) {
+	q := r.URL.Query()
+	engine := strings.TrimSpace(q.Get("engine"))
+	result := strings.TrimSpace(q.Get("result"))
+	termination := strings.TrimSpace(q.Get("termination"))
+	movetimeStr := strings.TrimSpace(q.Get("movetime"))
+	limit := 20
+	if limitStr := strings.TrimSpace(q.Get("limit")); limitStr != "" {
+		if v, err := strconv.Atoi(limitStr); err == nil && v > 0 {
+			limit = v
+		}
+	}
+	movetime := 0
+	if movetimeStr != "" {
+		if v, err := strconv.Atoi(movetimeStr); err == nil {
+			movetime = v
+		}
+	}
+
+	white := strings.TrimSpace(q.Get("white"))
+	black := strings.TrimSpace(q.Get("black"))
+	allowSwap := q.Get("swap") == "on"
+
+	filter := db.GameSearchFilter{
+		Engine:      engine,
+		White:       white,
+		Black:       black,
+		AllowSwap:   allowSwap,
+		MovetimeMS:  movetime,
+		Result:      result,
+		Termination: termination,
+	}
+	total, rows, err := store.SearchGames(ctx, filter, limit)
+	if err != nil {
+		return SearchView{}, err
+	}
+	engines, err := store.ListEngines(ctx)
+	if err != nil {
+		return SearchView{}, err
+	}
+	results, err := store.ListResults(ctx)
+	if err != nil {
+		return SearchView{}, err
+	}
+	terminations, err := store.ListTerminations(ctx)
+	if err != nil {
+		return SearchView{}, err
+	}
+	searchRows := make([]SearchRow, 0, len(rows))
+	for _, row := range rows {
+		plies := 0
+		if strings.TrimSpace(row.MovesUCI) != "" {
+			plies = len(strings.Fields(row.MovesUCI))
+		}
+		searchRows = append(searchRows, SearchRow{GameDetail: row, Plies: plies})
+	}
+	return SearchView{
+		Engine:      engine,
+		White:       white,
+		Black:       black,
+		AllowSwap:   allowSwap,
+		Movetime:    movetimeStr,
+		Result:      result,
+		Termination: termination,
+		Limit:       limit,
+		Total:       total,
+		Rows:        searchRows,
+		Engines:     engines,
+		Results:     results,
+		Terminations: terminations,
+	}, nil
 }
 
 func (h *Handler) handleResultDelete(w http.ResponseWriter, r *http.Request) {
@@ -292,6 +394,103 @@ func openingKey(movesUCI string) string {
 		return parts[0] + " " + parts[1]
 	}
 	return parts[0]
+}
+
+func (h *Handler) handleGameView(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimSpace(r.URL.Query().Get("id"))
+	if idStr == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	game, err := h.store.GetGame(r.Context(), id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	view, err := buildGameView(game)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	view.IsAdmin = h.isAdminRequest(w, r)
+	view.Page = "games"
+	_ = h.tpl.ExecuteTemplate(w, "game_viewer.html", view)
+}
+
+type GameMoveView struct {
+	Index int
+	UCI   string
+	SAN   string
+}
+
+type GamePositionView struct {
+	Index int
+	Board [][]SquareView
+}
+
+type GameView struct {
+	ID          int64
+	PlayedAt    string
+	White       string
+	Black       string
+	MovetimeMS  int
+	Result      string
+	Termination string
+	Moves       []GameMoveView
+	Positions   []GamePositionView
+	IsAdmin     bool
+	Page        string
+}
+
+func buildGameView(game db.GameDetail) (GameView, error) {
+	pos := chess.StartingPosition()
+	positions := []GamePositionView{{Index: 0, Board: boardFromPosition(pos)}}
+	moves := make([]GameMoveView, 0)
+
+	if strings.TrimSpace(game.MovesUCI) != "" {
+		parts := strings.Fields(game.MovesUCI)
+		for i, uci := range parts {
+			opt, err := chess.FEN(pos.String())
+			if err != nil {
+				break
+			}
+			g := chess.NewGame(opt)
+			n := chess.UCINotation{}
+			mv, err := n.Decode(g.Position(), uci)
+			if err != nil {
+				break
+			}
+			san := chess.AlgebraicNotation{}.Encode(g.Position(), mv)
+			if err := g.Move(mv); err != nil {
+				break
+			}
+			pos = g.Position()
+			moves = append(moves, GameMoveView{Index: i + 1, UCI: uci, SAN: san})
+			positions = append(positions, GamePositionView{Index: i + 1, Board: boardFromPosition(pos)})
+		}
+	}
+
+	return GameView{
+		ID:          game.ID,
+		PlayedAt:    game.PlayedAt,
+		White:       game.White,
+		Black:       game.Black,
+		MovetimeMS:  game.MovetimeMS,
+		Result:      game.Result,
+		Termination: game.Termination,
+		Moves:       moves,
+		Positions:   positions,
+	}, nil
 }
 
 func (h *Handler) handleMatchupMoves(w http.ResponseWriter, r *http.Request) {

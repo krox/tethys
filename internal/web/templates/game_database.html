@@ -34,6 +34,103 @@
 
         <main class="container">
             <h1>Game Database</h1>
+            <div class="card" style="margin-bottom: 16px;">
+                <h2>Search</h2>
+                <form method="get" action="/games" class="form">
+                    <div class="grid">
+                        <div>
+                            <label>Engine (any color)</label>
+                            <select name="engine">
+                                <option value="">Any</option>
+                                {{range .Search.Engines}}
+                                <option value="{{.}}" {{if eq $.Search.Engine .}}selected{{end}}>{{.}}</option>
+                                {{end}}
+                            </select>
+                        </div>
+                        <div>
+                            <label>White</label>
+                            <select name="white">
+                                <option value="">Any</option>
+                                {{range .Search.Engines}}
+                                <option value="{{.}}" {{if eq $.Search.White .}}selected{{end}}>{{.}}</option>
+                                {{end}}
+                            </select>
+                        </div>
+                        <div>
+                            <label>Black</label>
+                            <select name="black">
+                                <option value="">Any</option>
+                                {{range .Search.Engines}}
+                                <option value="{{.}}" {{if eq $.Search.Black .}}selected{{end}}>{{.}}</option>
+                                {{end}}
+                            </select>
+                            <label class="check compact" style="margin-top:6px;">
+                                <input type="checkbox" name="swap" {{if .Search.AllowSwap}}checked{{end}} />
+                                Allow swapped colors
+                            </label>
+                        </div>
+                        <div>
+                            <label>Movetime (ms)</label>
+                            <input name="movetime" value="{{.Search.Movetime}}" placeholder="e.g. 100" />
+                        </div>
+                        <div>
+                            <label>Result</label>
+                            <select name="result">
+                                <option value="">Any</option>
+                                {{range .Search.Results}}
+                                <option value="{{.}}" {{if eq $.Search.Result .}}selected{{end}}>{{.}}</option>
+                                {{end}}
+                            </select>
+                        </div>
+                        <div>
+                            <label>Termination</label>
+                            <select name="termination">
+                                <option value="">Any</option>
+                                {{range .Search.Terminations}}
+                                <option value="{{.}}" {{if eq $.Search.Termination .}}selected{{end}}>{{.}}</option>
+                                {{end}}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <button type="submit">Search</button>
+                        <a class="linkish" href="/games" style="padding:10px 0;">Reset</a>
+                    </div>
+                </form>
+                <div class="kv"><span>Matches</span><span>{{.Search.Total}}</span></div>
+                <div class="card" style="margin-top: 12px;">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Played</th>
+                                <th>White</th>
+                                <th>Black</th>
+                                <th>Result</th>
+                                <th>Termination</th>
+                                <th>Length (plies)</th>
+                                <th>Movetime</th>
+                                <th>View</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {{range .Search.Rows}}
+                            <tr>
+                                <td>{{.ID}}</td>
+                                <td class="mono">{{.PlayedAt}}</td>
+                                <td>{{.White}}</td>
+                                <td>{{.Black}}</td>
+                                <td>{{.Result}}</td>
+                                <td>{{.Termination}}</td>
+                                <td>{{.Plies}}</td>
+                                <td>{{.MovetimeMS}} ms</td>
+                                <td><a href="/games/view?id={{.ID}}">open</a></td>
+                            </tr>
+                            {{end}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
             <div class="card">
                 <h2>By Matchup</h2>
                 <table class="table">

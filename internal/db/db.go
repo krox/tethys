@@ -73,8 +73,31 @@ type GameRow struct {
 	Black      string
 	MovetimeMS int
 	Result     sql.NullString
+	Termination sql.NullString
 	MovesUCI   string
 	BookPlies  int
+}
+
+type GameDetail struct {
+	ID          int64
+	PlayedAt    string
+	White       string
+	Black       string
+	MovetimeMS  int
+	Result      string
+	Termination string
+	MovesUCI    string
+	BookPlies   int
+}
+
+type GameSearchFilter struct {
+	Engine      string
+	White       string
+	Black       string
+	AllowSwap   bool
+	MovetimeMS  int
+	Result      string
+	Termination string
 }
 
 func (s *Store) InsertFinishedGame(ctx context.Context, white, black string, movetimeMS int, result, termination, movesUCI string, bookPlies int) (int64, error) {
@@ -94,7 +117,7 @@ func (s *Store) InsertFinishedGame(ctx context.Context, white, black string, mov
 
 func (s *Store) LatestGame(ctx context.Context) (GameRow, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, played_at, engine_white, engine_black, movetime_ms, result, moves_uci, book_plies
+		SELECT id, played_at, engine_white, engine_black, movetime_ms, result, termination, moves_uci, book_plies
 		FROM games
 		ORDER BY id DESC
 		LIMIT 1
@@ -103,7 +126,7 @@ func (s *Store) LatestGame(ctx context.Context) (GameRow, error) {
 	if err := row.Scan(
 		&gr.ID, &gr.PlayedAt,
 		&gr.White, &gr.Black, &gr.MovetimeMS,
-		&gr.Result, &gr.MovesUCI, &gr.BookPlies,
+		&gr.Result, &gr.Termination, &gr.MovesUCI, &gr.BookPlies,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return GameRow{}, sql.ErrNoRows
@@ -115,7 +138,7 @@ func (s *Store) LatestGame(ctx context.Context) (GameRow, error) {
 
 func (s *Store) ListFinishedGames(ctx context.Context, limit int) ([]GameRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, played_at, engine_white, engine_black, movetime_ms, result, moves_uci, book_plies
+		SELECT id, played_at, engine_white, engine_black, movetime_ms, result, termination, moves_uci, book_plies
 		FROM games
 		ORDER BY id DESC
 		LIMIT ?
@@ -131,7 +154,7 @@ func (s *Store) ListFinishedGames(ctx context.Context, limit int) ([]GameRow, er
 		if err := rows.Scan(
 			&gr.ID, &gr.PlayedAt,
 			&gr.White, &gr.Black, &gr.MovetimeMS,
-			&gr.Result, &gr.MovesUCI, &gr.BookPlies,
+			&gr.Result, &gr.Termination, &gr.MovesUCI, &gr.BookPlies,
 		); err != nil {
 			return nil, err
 		}
@@ -232,6 +255,172 @@ func (s *Store) GameMoves(ctx context.Context, id int64) (moves, result string, 
 		result = "*"
 	}
 	return moves, result, nil
+}
+
+func (s *Store) GetGame(ctx context.Context, id int64) (GameDetail, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, played_at, engine_white, engine_black, movetime_ms,
+		       COALESCE(result, '*'), COALESCE(termination, ''), moves_uci, book_plies
+		FROM games
+		WHERE id = ?
+	`, id)
+	var gd GameDetail
+	if err := row.Scan(
+		&gd.ID, &gd.PlayedAt,
+		&gd.White, &gd.Black, &gd.MovetimeMS,
+		&gd.Result, &gd.Termination, &gd.MovesUCI, &gd.BookPlies,
+	); err != nil {
+		return GameDetail{}, err
+	}
+	return gd, nil
+}
+
+func (s *Store) SearchGames(ctx context.Context, filter GameSearchFilter, limit int) (int, []GameDetail, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	where := "WHERE 1=1"
+	args := make([]any, 0, 6)
+	if filter.White != "" && filter.Black != "" {
+		if filter.AllowSwap {
+			where += " AND ((engine_white = ? AND engine_black = ?) OR (engine_white = ? AND engine_black = ?))"
+			args = append(args, filter.White, filter.Black, filter.Black, filter.White)
+		} else {
+			where += " AND engine_white = ? AND engine_black = ?"
+			args = append(args, filter.White, filter.Black)
+		}
+	} else if filter.White != "" {
+		where += " AND engine_white = ?"
+		args = append(args, filter.White)
+	} else if filter.Black != "" {
+		where += " AND engine_black = ?"
+		args = append(args, filter.Black)
+	}
+	if filter.Engine != "" {
+		where += " AND (engine_white = ? OR engine_black = ?)"
+		args = append(args, filter.Engine, filter.Engine)
+	}
+	if filter.MovetimeMS > 0 {
+		where += " AND movetime_ms = ?"
+		args = append(args, filter.MovetimeMS)
+	}
+	if filter.Result != "" {
+		where += " AND COALESCE(result, '*') = ?"
+		args = append(args, filter.Result)
+	}
+	if filter.Termination != "" {
+		where += " AND COALESCE(termination, '') = ?"
+		args = append(args, filter.Termination)
+	}
+
+	countQuery := "SELECT COUNT(*) FROM games " + where
+	row := s.db.QueryRowContext(ctx, countQuery, args...)
+	var total int
+	if err := row.Scan(&total); err != nil {
+		return 0, nil, err
+	}
+
+	listQuery := `
+		SELECT id, played_at, engine_white, engine_black, movetime_ms,
+		       COALESCE(result, '*'), COALESCE(termination, ''), moves_uci, book_plies
+		FROM games
+		` + where + `
+		ORDER BY id DESC
+		LIMIT ?
+	`
+	listArgs := append(args, limit)
+	rows, err := s.db.QueryContext(ctx, listQuery, listArgs...)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer rows.Close()
+
+	results := make([]GameDetail, 0)
+	for rows.Next() {
+		var gd GameDetail
+		if err := rows.Scan(
+			&gd.ID, &gd.PlayedAt,
+			&gd.White, &gd.Black, &gd.MovetimeMS,
+			&gd.Result, &gd.Termination, &gd.MovesUCI, &gd.BookPlies,
+		); err != nil {
+			return 0, nil, err
+		}
+		results = append(results, gd)
+	}
+	return total, results, rows.Err()
+}
+
+func (s *Store) ListEngines(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT engine_white FROM games
+		UNION
+		SELECT DISTINCT engine_black FROM games
+		ORDER BY 1
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		if name != "" {
+			out = append(out, name)
+		}
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) ListResults(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT COALESCE(result, '*')
+		FROM games
+		ORDER BY 1
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var res string
+		if err := rows.Scan(&res); err != nil {
+			return nil, err
+		}
+		out = append(out, res)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) ListTerminations(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT COALESCE(termination, '')
+		FROM games
+		WHERE termination IS NOT NULL
+		ORDER BY 1
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var term string
+		if err := rows.Scan(&term); err != nil {
+			return nil, err
+		}
+		if term != "" {
+			out = append(out, term)
+		}
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) ResultsByPair(ctx context.Context) ([]PairResult, error) {
