@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tethys - game {{.ID}}</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+    <header class="top">
+        <div class="brand">tethys</div>
+    </header>
+
+    <div class="shell">
+        <aside class="sidebar">
+            <nav class="side-nav">
+                <a href="/" {{if eq .Page "live" }}class="active" {{end}}>Live View</a>
+                <a href="/opening" {{if eq .Page "opening" }}class="active" {{end}}>Opening Explorer</a>
+                <a href="/book" {{if eq .Page "book" }}class="active" {{end}}>Book Explorer</a>
+                <a href="/results" {{if eq .Page "ranking" }}class="active" {{end}}>Ranking</a>
+                <a href="/games" {{if eq .Page "games" }}class="active" {{end}}>Game Database</a>
+                {{if .IsAdmin}}
+                <a href="/admin/settings" {{if eq .Page "settings" }}class="active" {{end}}>Global Settings</a>
+                <a href="/admin/matches" {{if eq .Page "matches" }}class="active" {{end}}>Match Settings</a>
+                <a href="/admin/engines" {{if eq .Page "engines" }}class="active" {{end}}>Engine Settings</a>
+                <form method="post" action="/admin/logout">
+                    <button type="submit" class="linkish">Logout</button>
+                </form>
+                {{end}}
+            </nav>
+        </aside>
+
+        <main class="container">
+            <h1>Game {{.ID}}</h1>
+
+            <div class="grid">
+                <div>
+                    <div class="kv"><span>Played</span><span class="mono">{{.PlayedAt}}</span></div>
+                    <div class="kv"><span>White</span><span>{{.White}}</span></div>
+                    <div class="kv"><span>Black</span><span>{{.Black}}</span></div>
+                    <div class="kv"><span>Movetime</span><span>{{.MovetimeMS}} ms</span></div>
+                    <div class="kv"><span>Result</span><span>{{.Result}}</span></div>
+                    <div class="kv"><span>Termination</span><span>{{.Termination}}</span></div>
+                </div>
+                <div>
+                    <div class="row">
+                        <button type="button" id="prev_move">Previous</button>
+                        <button type="button" id="next_move">Next</button>
+                        <span id="move_index" class="mono"></span>
+                    </div>
+                    <div id="boards">
+                        {{range .Positions}}
+                        <div class="board-frame" data-index="{{.Index}}">
+                            <div class="board">
+                                {{range .Board}}
+                                <div class="rank">
+                                    {{range .}}
+                                    <div class="{{.Class}}">{{.Glyph}}</div>
+                                    {{end}}
+                                </div>
+                                {{end}}
+                            </div>
+                        </div>
+                        {{end}}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 16px;">
+                <h2>Moves</h2>
+                <ol id="move_list" class="moves-list">
+                    {{range .Moves}}
+                    <li data-index="{{.Index}}">{{.SAN}}</li>
+                    {{end}}
+                </ol>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        (function () {
+            const frames = Array.from(document.querySelectorAll('.board-frame'));
+            const moves = Array.from(document.querySelectorAll('#move_list li'));
+            const prevBtn = document.getElementById('prev_move');
+            const nextBtn = document.getElementById('next_move');
+            const idxLabel = document.getElementById('move_index');
+            let idx = 0;
+
+            function setActive(index) {
+                idx = Math.max(0, Math.min(index, frames.length - 1));
+                frames.forEach((f) => f.classList.toggle('active', Number(f.dataset.index) === idx));
+                moves.forEach((m) => m.classList.toggle('active', Number(m.dataset.index) === idx));
+                idxLabel.textContent = `${idx}/${frames.length - 1}`;
+            }
+
+            prevBtn.addEventListener('click', () => setActive(idx - 1));
+            nextBtn.addEventListener('click', () => setActive(idx + 1));
+
+            moves.forEach((m) => {
+                m.addEventListener('click', () => setActive(Number(m.dataset.index)));
+            });
+
+            setActive(0);
+        })();
+    </script>
+</body>
+
+</html>

@@ -67,15 +67,15 @@ func NewStore(db *sql.DB) *Store {
 }
 
 type GameRow struct {
-	ID         int64
-	PlayedAt   string
-	White      string
-	Black      string
-	MovetimeMS int
-	Result     sql.NullString
+	ID          int64
+	PlayedAt    string
+	White       string
+	Black       string
+	MovetimeMS  int
+	Result      sql.NullString
 	Termination sql.NullString
-	MovesUCI   string
-	BookPlies  int
+	MovesUCI    string
+	BookPlies   int
 }
 
 type GameDetail struct {

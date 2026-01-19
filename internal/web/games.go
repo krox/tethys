@@ -51,18 +51,18 @@ type OpeningRow struct {
 }
 
 type SearchView struct {
-	Engine      string
-	White       string
-	Black       string
-	AllowSwap   bool
-	Movetime    string
-	Result      string
-	Termination string
-	Limit       int
-	Total       int
-	Rows        []SearchRow
-	Engines     []string
-	Results     []string
+	Engine       string
+	White        string
+	Black        string
+	AllowSwap    bool
+	Movetime     string
+	Result       string
+	Termination  string
+	Limit        int
+	Total        int
+	Rows         []SearchRow
+	Engines      []string
+	Results      []string
 	Terminations []string
 }
 
@@ -205,18 +205,18 @@ func buildSearchView(ctx context.Context, store *db.Store, r *http.Request) (Sea
 		searchRows = append(searchRows, SearchRow{GameDetail: row, Plies: plies})
 	}
 	return SearchView{
-		Engine:      engine,
-		White:       white,
-		Black:       black,
-		AllowSwap:   allowSwap,
-		Movetime:    movetimeStr,
-		Result:      result,
-		Termination: termination,
-		Limit:       limit,
-		Total:       total,
-		Rows:        searchRows,
-		Engines:     engines,
-		Results:     results,
+		Engine:       engine,
+		White:        white,
+		Black:        black,
+		AllowSwap:    allowSwap,
+		Movetime:     movetimeStr,
+		Result:       result,
+		Termination:  termination,
+		Limit:        limit,
+		Total:        total,
+		Rows:         searchRows,
+		Engines:      engines,
+		Results:      results,
 		Terminations: terminations,
 	}, nil
 }
