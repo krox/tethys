@@ -46,10 +46,9 @@ type Runner struct {
 	bookMod  time.Time
 	book     *book.Book
 
-	mu      sync.RWMutex
-	live    LiveState
-	stop    chan struct{}
-	restart chan struct{}
+	mu   sync.RWMutex
+	live LiveState
+	stop chan struct{}
 
 	runningMu sync.Mutex
 	running   bool
@@ -58,12 +57,11 @@ type Runner struct {
 func NewRunner(store *db.Store, config *configstore.Store, b *Broadcaster) *Runner {
 	start := chess.StartingPosition()
 	r := &Runner{
-		store:   store,
-		config:  config,
-		b:       b,
-		stop:    make(chan struct{}),
-		restart: make(chan struct{}, 1),
-		live:    LiveState{Status: "starting", FEN: start.String(), Board: boardFromPosition(start)},
+		store:  store,
+		config: config,
+		b:      b,
+		stop:   make(chan struct{}),
+		live:   LiveState{Status: "starting", FEN: start.String(), Board: boardFromPosition(start)},
 	}
 	if store != nil {
 		if latest, err := store.LatestGame(context.Background()); err == nil {
@@ -93,13 +91,6 @@ func (r *Runner) Stop() {
 		return
 	default:
 		close(r.stop)
-	}
-}
-
-func (r *Runner) Restart() {
-	select {
-	case r.restart <- struct{}{}:
-	default:
 	}
 }
 
@@ -253,9 +244,6 @@ func (r *Runner) loop(parent context.Context) {
 				select {
 				case <-r.stop:
 					r.failGame(ctx, "*", "service stopping")
-					return
-				case <-r.restart:
-					r.failGame(ctx, "*", "restarted by admin")
 					return
 				default:
 				}

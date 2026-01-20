@@ -198,11 +198,6 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 	http.Redirect(w, r, "/admin/engines", http.StatusSeeOther)
 }
 
-func (h *Handler) handleAdminRestart(w http.ResponseWriter, r *http.Request) {
-	h.r.Restart()
-	http.Redirect(w, r, "/admin", http.StatusSeeOther)
-}
-
 func (h *Handler) isAdminRequest(w http.ResponseWriter, r *http.Request) bool {
 	if h.adminToken == "" {
 		return false

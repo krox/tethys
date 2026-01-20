@@ -73,6 +73,5 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/matches", h.requireAdmin(h.handleAdminMatchesSave))
 	mux.HandleFunc("GET /admin/engines", h.requireAdmin(h.handleAdminEngines))
 	mux.HandleFunc("POST /admin/engines", h.requireAdmin(h.handleAdminEnginesSave))
-	mux.HandleFunc("POST /admin/restart", h.requireAdmin(h.handleAdminRestart))
 	mux.HandleFunc("POST /admin/logout", h.requireAdmin(h.handleAdminLogout))
 }
