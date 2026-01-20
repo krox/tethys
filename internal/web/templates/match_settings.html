@@ -42,21 +42,22 @@
                                 <th>Engine</th>
                                 <th class="matrix-head strength-head">Strength</th>
                                 {{range .Engines}}
-                                <th class="matrix-head matrix-head-col"><span class="matrix-head-text">{{.}}</span></th>
+                                <th class="matrix-head matrix-head-col"><span class="matrix-head-text">{{.Name}}</span>
+                                </th>
                                 {{end}}
                             </tr>
                         </thead>
                         <tbody>
                             {{range .Rows}}
                             <tr>
-                                <th class="matrix-head">{{.Engine}}</th>
+                                <th class="matrix-head">{{.EngineName}}</th>
                                 <td class="matrix-cell strength-cell">
-                                    {{with (index $.Strengths .Engine)}}{{printf "%.1f" .}}%{{else}}—{{end}}
+                                    {{with (index $.Strengths .EngineName)}}{{printf "%.1f" .}}%{{else}}—{{end}}
                                 </td>
                                 {{range .Cells}}
-                                <td class="matrix-cell" data-a="{{.A}}" data-b="{{.B}}">
-                                    <input type="hidden" name="pair_a_{{.Index}}" value="{{.A}}" />
-                                    <input type="hidden" name="pair_b_{{.Index}}" value="{{.B}}" />
+                                <td class="matrix-cell" data-a="{{.AID}}" data-b="{{.BID}}">
+                                    <input type="hidden" name="pair_a_{{.Index}}" value="{{.AID}}" />
+                                    <input type="hidden" name="pair_b_{{.Index}}" value="{{.BID}}" />
                                     <label class="matrix-label" title="{{.Label}}">
                                         <input type="checkbox" name="pair_enabled_{{.Index}}" {{if
                                             .Enabled}}checked{{end}} />
@@ -81,7 +82,9 @@
             const byKey = new Map();
 
             function keyFor(a, b) {
-                return a < b ? `${a}::${b}` : `${b}::${a}`;
+                const aNum = Number(a);
+                const bNum = Number(b);
+                return aNum < bNum ? `${a}::${b}` : `${b}::${a}`;
             }
 
             cells.forEach((cell) => {

@@ -8,12 +8,22 @@ import (
 )
 
 type matchupCandidate struct {
-	White string
-	Black string
+	WhiteID int64
+	BlackID int64
 }
 
-func selectAssignment(cfg configstore.Config, counts []db.MatchupCount, pickIdx int) (configstore.ColorAssignment, int) {
-	assign := configstore.ColorAssignment{
+type ColorAssignment struct {
+	White        db.Engine
+	Black        db.Engine
+	MovetimeMS   int
+	MaxPlies     int
+	BookEnabled  bool
+	BookPath     string
+	BookMaxPlies int
+}
+
+func selectAssignment(cfg configstore.Config, engines []db.Engine, matchups []db.Matchup, counts []db.MatchupCount, pickIdx int) (ColorAssignment, int) {
+	assign := ColorAssignment{
 		MovetimeMS:   cfg.MovetimeMS,
 		MaxPlies:     cfg.MaxPlies,
 		BookEnabled:  cfg.BookEnabled,
@@ -30,23 +40,23 @@ func selectAssignment(cfg configstore.Config, counts []db.MatchupCount, pickIdx 
 		assign.BookMaxPlies = 16
 	}
 
-	engineByName := make(map[string]configstore.EngineConfig)
-	for _, e := range cfg.Engines {
-		if e.Name == "" || e.Path == "" {
+	engineByID := make(map[int64]db.Engine)
+	for _, e := range engines {
+		if e.ID == 0 || e.Name == "" || e.Path == "" {
 			continue
 		}
-		engineByName[e.Name] = e
+		engineByID[e.ID] = e
 	}
 
-	validPairs := make([]configstore.PairConfig, 0, len(cfg.EnabledPairs))
-	for _, p := range cfg.EnabledPairs {
-		if p.A == "" || p.B == "" {
+	validPairs := make([]db.Matchup, 0, len(matchups))
+	for _, p := range matchups {
+		if p.EngineAID == 0 || p.EngineBID == 0 {
 			continue
 		}
-		if _, ok := engineByName[p.A]; !ok {
+		if _, ok := engineByID[p.EngineAID]; !ok {
 			continue
 		}
-		if _, ok := engineByName[p.B]; !ok {
+		if _, ok := engineByID[p.EngineBID]; !ok {
 			continue
 		}
 		validPairs = append(validPairs, p)
@@ -58,23 +68,23 @@ func selectAssignment(cfg configstore.Config, counts []db.MatchupCount, pickIdx 
 
 	countMap := make(map[string]int)
 	for _, c := range counts {
-		key := fmt.Sprintf("%s\x00%s\x00%d", c.White, c.Black, c.MovetimeMS)
+		key := fmt.Sprintf("%d\x00%d\x00%d", c.WhiteID, c.BlackID, c.MovetimeMS)
 		countMap[key] = c.Count
 	}
 
 	candidates := make([]matchupCandidate, 0, len(validPairs)*2)
 	for _, p := range validPairs {
-		if p.A == p.B {
-			candidates = append(candidates, matchupCandidate{White: p.A, Black: p.A})
+		if p.EngineAID == p.EngineBID {
+			candidates = append(candidates, matchupCandidate{WhiteID: p.EngineAID, BlackID: p.EngineAID})
 			continue
 		}
-		candidates = append(candidates, matchupCandidate{White: p.A, Black: p.B})
-		candidates = append(candidates, matchupCandidate{White: p.B, Black: p.A})
+		candidates = append(candidates, matchupCandidate{WhiteID: p.EngineAID, BlackID: p.EngineBID})
+		candidates = append(candidates, matchupCandidate{WhiteID: p.EngineBID, BlackID: p.EngineAID})
 	}
 
 	minCount := -1
 	for _, c := range candidates {
-		key := fmt.Sprintf("%s\x00%s\x00%d", c.White, c.Black, assign.MovetimeMS)
+		key := fmt.Sprintf("%d\x00%d\x00%d", c.WhiteID, c.BlackID, assign.MovetimeMS)
 		count := countMap[key]
 		if minCount == -1 || count < minCount {
 			minCount = count
@@ -83,7 +93,7 @@ func selectAssignment(cfg configstore.Config, counts []db.MatchupCount, pickIdx 
 
 	filtered := make([]matchupCandidate, 0, len(candidates))
 	for _, c := range candidates {
-		key := fmt.Sprintf("%s\x00%s\x00%d", c.White, c.Black, assign.MovetimeMS)
+		key := fmt.Sprintf("%d\x00%d\x00%d", c.WhiteID, c.BlackID, assign.MovetimeMS)
 		if countMap[key] == minCount {
 			filtered = append(filtered, c)
 		}
@@ -98,10 +108,9 @@ func selectAssignment(cfg configstore.Config, counts []db.MatchupCount, pickIdx 
 	}
 	chosen := filtered[idx]
 
-	white := engineByName[chosen.White]
-	black := engineByName[chosen.Black]
+	white := engineByID[chosen.WhiteID]
+	black := engineByID[chosen.BlackID]
 	assign.White, assign.Black = white, black
-	assign.WhiteName, assign.BlackName = chosen.White, chosen.Black
 
 	nextIdx := (idx + 1) % len(filtered)
 	return assign, nextIdx

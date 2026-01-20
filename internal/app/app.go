@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"tethys/internal/config"
@@ -53,7 +54,7 @@ func New(cfg config.Config) (*App, error) {
 		_ = sqlDB.Close()
 		return nil, err
 	}
-	if err := autoConfigureEngines(configStore); err != nil {
+	if err := ensureEnginesInDB(gameStore, configStore); err != nil {
 		_ = sqlDB.Close()
 		return nil, err
 	}
@@ -89,14 +90,45 @@ func (a *App) Close() {
 	})
 }
 
-func autoConfigureEngines(store *configstore.Store) error {
+func ensureEnginesInDB(store *db.Store, conf *configstore.Store) error {
 	ctx := context.Background()
-	cfg, err := store.GetConfig(ctx)
+	engines, err := store.ListEngines(ctx)
 	if err != nil {
 		return err
 	}
+	if len(engines) > 0 {
+		return nil
+	}
+	if conf != nil {
+		cfg, err := conf.GetConfig(ctx)
+		if err != nil {
+			return err
+		}
+		for _, e := range cfg.Engines {
+			if e.Path == "" {
+				continue
+			}
+			name := e.Name
+			if name == "" {
+				name = engineDisplayName(e.Path, "engine")
+			}
+			_, err := store.InsertEngine(ctx, db.Engine{
+				Name: name,
+				Path: e.Path,
+				Args: e.Args,
+				Init: e.Init,
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
 
-	if len(cfg.Engines) > 0 {
+	engines, err = store.ListEngines(ctx)
+	if err != nil {
+		return err
+	}
+	if len(engines) > 0 {
 		return nil
 	}
 
@@ -108,14 +140,11 @@ func autoConfigureEngines(store *configstore.Store) error {
 	if stockfishPath == "" {
 		return nil
 	}
-
-	cfg.Engines = []configstore.EngineConfig{
-		{
-			Name: "stockfish",
-			Path: stockfishPath,
-		},
-	}
-	return store.UpdateConfig(ctx, cfg)
+	_, err = store.InsertEngine(ctx, db.Engine{
+		Name: "stockfish",
+		Path: stockfishPath,
+	})
+	return err
 }
 
 func firstExistingPath(candidates []string) string {
@@ -125,4 +154,12 @@ func firstExistingPath(candidates []string) string {
 		}
 	}
 	return ""
+}
+
+func engineDisplayName(path string, fallback string) string {
+	base := filepath.Base(path)
+	if base == "." || base == "/" || base == "" {
+		return fallback
+	}
+	return base
 }

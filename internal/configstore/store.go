@@ -18,8 +18,10 @@ type EngineConfig struct {
 }
 
 type PairConfig struct {
-	A string `json:"a"`
-	B string `json:"b"`
+	AID int64  `json:"a_id,omitempty"`
+	BID int64  `json:"b_id,omitempty"`
+	A   string `json:"a,omitempty"`
+	B   string `json:"b,omitempty"`
 }
 
 type Config struct {
@@ -32,18 +34,6 @@ type Config struct {
 	BookPath     string         `json:"book_path"`
 	BookMaxPlies int            `json:"book_max_plies"`
 	UpdatedAt    time.Time      `json:"updated_at"`
-}
-
-type ColorAssignment struct {
-	White        EngineConfig
-	Black        EngineConfig
-	WhiteName    string
-	BlackName    string
-	MovetimeMS   int
-	MaxPlies     int
-	BookEnabled  bool
-	BookPath     string
-	BookMaxPlies int
 }
 
 type Store struct {
@@ -76,6 +66,12 @@ func (s *Store) UpdateConfig(ctx context.Context, cfg Config) error {
 	_ = ctx
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for i := range cfg.EnabledPairs {
+		if cfg.EnabledPairs[i].AID != 0 || cfg.EnabledPairs[i].BID != 0 {
+			cfg.EnabledPairs[i].A = ""
+			cfg.EnabledPairs[i].B = ""
+		}
+	}
 
 	cfg.UpdatedAt = time.Now().UTC()
 	s.cfg = cfg
@@ -129,28 +125,6 @@ func (s *Store) loadOrInit(baseDir string) error {
 			if len(engines) > 0 {
 				s.cfg.Engines = engines
 				_ = s.saveLocked()
-			}
-		}
-	}
-	if len(s.cfg.Engines) > 0 && len(s.cfg.EnabledPairs) == 0 {
-		var raw map[string]json.RawMessage
-		if err := json.Unmarshal(data, &raw); err == nil {
-			if _, ok := raw["enabled_pairs"]; !ok {
-				pairs := make([]PairConfig, 0, len(s.cfg.Engines))
-				for i := 0; i < len(s.cfg.Engines); i++ {
-					for j := i; j < len(s.cfg.Engines); j++ {
-						a := s.cfg.Engines[i].Name
-						b := s.cfg.Engines[j].Name
-						if a == "" || b == "" {
-							continue
-						}
-						pairs = append(pairs, PairConfig{A: a, B: b})
-					}
-				}
-				if len(pairs) > 0 {
-					s.cfg.EnabledPairs = pairs
-					_ = s.saveLocked()
-				}
 			}
 		}
 	}

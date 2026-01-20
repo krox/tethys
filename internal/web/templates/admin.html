@@ -49,8 +49,8 @@
                 <div id="match_setup" class="activation-list">
                     {{range .Pairs}}
                     <div class="activation-row" data-index="{{.Index}}">
-                        <input type="hidden" name="pair_a_{{.Index}}" value="{{.A}}" />
-                        <input type="hidden" name="pair_b_{{.Index}}" value="{{.B}}" />
+                        <input type="hidden" name="pair_a_{{.Index}}" value="{{.AID}}" />
+                        <input type="hidden" name="pair_b_{{.Index}}" value="{{.BID}}" />
                         <label class="check compact">
                             <input type="checkbox" name="pair_enabled_{{.Index}}" {{if .Enabled}}checked{{end}} />
                             <span class="activation-label">{{.Label}}</span>
@@ -172,7 +172,9 @@
                     const b = row.querySelector('input[name^="pair_b_"]')?.value || '';
                     const checked = row.querySelector('input[type="checkbox"]')?.checked;
                     if (!a || !b || !checked) return;
-                    const key = a < b ? `${a}::${b}` : `${b}::${a}`;
+                    const aNum = Number(a);
+                    const bNum = Number(b);
+                    const key = aNum < bNum ? `${a}::${b}` : `${b}::${a}`;
                     selected.add(key);
                 });
                 return selected;
@@ -191,7 +193,9 @@
                     for (let j = i; j < names.length; j++) {
                         const a = names[i];
                         const b = names[j];
-                        const key = a < b ? `${a}::${b}` : `${b}::${a}`;
+                        const aNum = Number(a);
+                        const bNum = Number(b);
+                        const key = aNum < bNum ? `${a}::${b}` : `${b}::${a}`;
                         const label = a === b ? `${a} (selfplay)` : `${a} vs ${b}`;
                         const row = document.createElement('div');
                         row.className = 'activation-row';

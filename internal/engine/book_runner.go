@@ -6,10 +6,9 @@ import (
 	"github.com/notnil/chess"
 
 	"tethys/internal/book"
-	"tethys/internal/configstore"
 )
 
-func (r *Runner) bookMove(pos *chess.Position, ply int, assignment configstore.ColorAssignment) (string, bool) {
+func (r *Runner) bookMove(pos *chess.Position, ply int, assignment ColorAssignment) (string, bool) {
 	if !assignment.BookEnabled || assignment.BookPath == "" {
 		return "", false
 	}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"tethys/internal/configstore"
+	"tethys/internal/db"
 	"tethys/internal/engine"
 )
 
@@ -111,19 +112,30 @@ func (h *Handler) handleAdminMatches(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	engines, err := h.store.ListEngines(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	matchups, err := h.store.ListMatchups(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	results, err := h.store.ResultsByPair(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	ranking := computeBradleyTerry(results)
-	order := matchOrder(cfg, ranking)
-	rows := buildMatchRows(cfg, order)
-	strengths := matchStrengths(ranking, cfg)
+	order := matchOrder(engines, ranking)
+	orderedEngines := orderEngines(engines, order)
+	rows := buildMatchRows(orderedEngines, matchups)
+	strengths := matchStrengths(ranking, orderedEngines)
 	_ = h.tpl.ExecuteTemplate(w, "match_settings.html", map[string]any{
 		"Cfg":       cfg,
 		"Rows":      rows,
-		"Engines":   order,
+		"Engines":   buildEngineHeaders(orderedEngines),
 		"Strengths": strengths,
 		"PairCount": matchCellCount(rows),
 		"IsAdmin":   true,
@@ -136,13 +148,8 @@ func (h *Handler) handleAdminMatchesSave(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	cfg, err := h.conf.GetConfig(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	cfg.EnabledPairs = parsePairsFromForm(r)
-	if err := h.conf.UpdateConfig(r.Context(), cfg); err != nil {
+	matchups := parsePairsFromForm(r)
+	if err := h.store.ReplaceMatchups(r.Context(), matchups); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -155,7 +162,27 @@ func (h *Handler) handleAdminEngines(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	view := buildAdminView(cfg, nil)
+	engines, err := h.store.ListEngines(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	gameCounts, err := h.store.EngineGameCounts(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	matchupCounts, err := h.store.EngineMatchupCounts(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	matchups, err := h.store.ListMatchups(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	view := buildAdminView(cfg, engines, matchups, nil, gameCounts, matchupCounts)
 	view.IsAdmin = true
 	view.Page = "engines"
 	_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
@@ -172,26 +199,117 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	engines, view, ok := parseEnginesFromForm(r)
+	parsed, view, ok := parseEnginesFromForm(r)
 	if !ok {
-		view.Cfg = cfg
-		view.Cfg.Engines = engines
-		view.IsAdmin = true
-		view.Page = "engines"
-		_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
-		return
-	}
-	if errMap := testEngines(r.Context(), engines); len(errMap) > 0 {
-		view = buildAdminView(configstore.Config{Engines: engines, EnabledPairs: cfg.EnabledPairs}, errMap)
 		view.IsAdmin = true
 		view.Page = "engines"
 		_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 		return
 	}
 
-	cfg.Engines = engines
-	cfg.EnabledPairs = filterPairs(cfg.EnabledPairs, engines)
-	if err := h.conf.UpdateConfig(r.Context(), cfg); err != nil {
+	if errMap := testEngines(r.Context(), parsed); len(errMap) > 0 {
+		gameCounts, err := h.store.EngineGameCounts(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		matchupCounts, err := h.store.EngineMatchupCounts(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		view.Engines = buildEngineViewsFromList(parsed, errMap, gameCounts, matchupCounts)
+		view.IsAdmin = true
+		view.Page = "engines"
+		_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
+		return
+	}
+
+	current, err := h.store.ListEngines(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	gameCounts, err := h.store.EngineGameCounts(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	matchupCounts, err := h.store.EngineMatchupCounts(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	seen := make(map[int64]bool)
+	for _, e := range parsed {
+		if e.ID == 0 {
+			if _, err := h.store.InsertEngine(r.Context(), e); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			continue
+		}
+		seen[e.ID] = true
+		if err := h.store.UpdateEngine(r.Context(), e); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	errByID := make(map[int64]string)
+	for _, e := range current {
+		if e.ID == 0 || seen[e.ID] {
+			continue
+		}
+		if gameCounts[e.ID] > 0 {
+			errByID[e.ID] = "engine used by games"
+			continue
+		}
+		if matchupCounts[e.ID] > 0 {
+			errByID[e.ID] = "engine used by matchups"
+			continue
+		}
+		if err := h.store.DeleteEngine(r.Context(), e.ID); err != nil {
+			errByID[e.ID] = err.Error()
+		}
+	}
+	if len(errByID) > 0 {
+		fresh, err := h.store.ListEngines(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		matchups, err := h.store.ListMatchups(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		view = buildAdminView(cfg, fresh, matchups, errByID, gameCounts, matchupCounts)
+		view.IsAdmin = true
+		view.Page = "engines"
+		_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
+		return
+	}
+
+	http.Redirect(w, r, "/admin/engines", http.StatusSeeOther)
+}
+
+func (h *Handler) handleAdminEnginePrune(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	idStr := strings.TrimSpace(r.Form.Get("engine_id"))
+	engineID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || engineID == 0 {
+		http.Error(w, "invalid engine id", http.StatusBadRequest)
+		return
+	}
+	if _, err := h.store.DeleteGamesByEngine(r.Context(), engineID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := h.store.DeleteMatchupsByEngine(r.Context(), engineID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -234,18 +352,23 @@ func tokensEqual(a, b string) bool {
 }
 
 type EngineView struct {
-	Index int
-	Name  string
-	Path  string
-	Args  string
-	Init  string
-	Error string
+	ID       int64
+	Index    int
+	Name     string
+	Path     string
+	Args     string
+	Init     string
+	Error    string
+	Games    int
+	Matchups int
 }
 
 type PairView struct {
 	Index   int
-	A       string
-	B       string
+	AID     int64
+	BID     int64
+	AName   string
+	BName   string
 	Label   string
 	Enabled bool
 }
@@ -258,52 +381,64 @@ type AdminView struct {
 	Page    string
 }
 
-func buildAdminView(cfg configstore.Config, errMap map[int]string) AdminView {
-	views := make([]EngineView, 0, len(cfg.Engines))
-	for i, e := range cfg.Engines {
+func buildAdminView(cfg configstore.Config, engines []db.Engine, matchups []db.Matchup, errByID map[int64]string, gameCounts map[int64]int, matchupCounts map[int64]int) AdminView {
+	views := make([]EngineView, 0, len(engines))
+	for i, e := range engines {
 		view := EngineView{
-			Index: i,
-			Name:  e.Name,
-			Path:  e.Path,
-			Args:  e.Args,
-			Init:  e.Init,
+			ID:       e.ID,
+			Index:    i,
+			Name:     e.Name,
+			Path:     e.Path,
+			Args:     e.Args,
+			Init:     e.Init,
+			Games:    gameCounts[e.ID],
+			Matchups: matchupCounts[e.ID],
 		}
-		if errMap != nil {
-			view.Error = errMap[i]
+		if errByID != nil {
+			view.Error = errByID[e.ID]
 		}
 		views = append(views, view)
 	}
 
-	enabled := make(map[[2]string]bool)
-	for _, p := range cfg.EnabledPairs {
-		a, b := p.A, p.B
+	nameByID := make(map[int64]string)
+	for _, e := range engines {
+		nameByID[e.ID] = e.Name
+	}
+
+	enabled := make(map[[2]int64]bool)
+	for _, p := range matchups {
+		a, b := p.EngineAID, p.EngineBID
+		if a == 0 || b == 0 {
+			continue
+		}
 		if a > b {
 			a, b = b, a
 		}
-		if a == "" || b == "" {
-			continue
-		}
-		enabled[[2]string{a, b}] = true
+		enabled[[2]int64{a, b}] = true
 	}
 
 	pairs := make([]PairView, 0)
-	for i := 0; i < len(cfg.Engines); i++ {
-		for j := i; j < len(cfg.Engines); j++ {
-			a := cfg.Engines[i].Name
-			b := cfg.Engines[j].Name
-			if a == "" || b == "" {
+	for i := 0; i < len(engines); i++ {
+		for j := i; j < len(engines); j++ {
+			aID := engines[i].ID
+			bID := engines[j].ID
+			aName := nameByID[aID]
+			bName := nameByID[bID]
+			if aID == 0 || bID == 0 {
 				continue
 			}
-			label := a
-			if a == b {
-				label = fmt.Sprintf("%s (selfplay)", a)
+			label := aName
+			if aID == bID {
+				label = fmt.Sprintf("%s (selfplay)", aName)
 			} else {
-				label = fmt.Sprintf("%s vs %s", a, b)
+				label = fmt.Sprintf("%s vs %s", aName, bName)
 			}
-			key := [2]string{minString(a, b), maxString(a, b)}
+			key := [2]int64{minInt(aID, bID), maxInt(aID, bID)}
 			pairs = append(pairs, PairView{
-				A:       a,
-				B:       b,
+				AID:     aID,
+				BID:     bID,
+				AName:   aName,
+				BName:   bName,
 				Label:   label,
 				Enabled: enabled[key],
 			})
@@ -316,18 +451,20 @@ func buildAdminView(cfg configstore.Config, errMap map[int]string) AdminView {
 	return AdminView{Cfg: cfg, Engines: views, Pairs: pairs}
 }
 
-func parseEnginesFromForm(r *http.Request) ([]configstore.EngineConfig, AdminView, bool) {
+func parseEnginesFromForm(r *http.Request) ([]db.Engine, AdminView, bool) {
 	count, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("engine_count")))
 	if count < 0 {
 		count = 0
 	}
 
-	engines := make([]configstore.EngineConfig, 0, count)
+	engines := make([]db.Engine, 0, count)
 	viewEngines := make([]EngineView, 0, count)
 	nameIndex := make(map[string]int)
 	errMap := make(map[int]string)
 
 	for i := 0; i < count; i++ {
+		idStr := strings.TrimSpace(r.Form.Get(fmt.Sprintf("engine_id_%d", i)))
+		id, _ := strconv.ParseInt(idStr, 10, 64)
 		name := strings.TrimSpace(r.Form.Get(fmt.Sprintf("engine_name_%d", i)))
 		path := strings.TrimSpace(r.Form.Get(fmt.Sprintf("engine_path_%d", i)))
 		args := strings.TrimSpace(r.Form.Get(fmt.Sprintf("engine_args_%d", i)))
@@ -353,13 +490,15 @@ func parseEnginesFromForm(r *http.Request) ([]configstore.EngineConfig, AdminVie
 			nameIndex[name] = len(engines)
 		}
 
-		engines = append(engines, configstore.EngineConfig{
+		engines = append(engines, db.Engine{
+			ID:   id,
 			Name: name,
 			Path: path,
 			Args: args,
 			Init: init,
 		})
 		viewEngines = append(viewEngines, EngineView{
+			ID:    id,
 			Index: len(engines) - 1,
 			Name:  name,
 			Path:  path,
@@ -375,35 +514,36 @@ func parseEnginesFromForm(r *http.Request) ([]configstore.EngineConfig, AdminVie
 	}
 
 	if len(errMap) > 0 {
-		cfg := configstore.Config{Engines: engines}
-		return nil, AdminView{Cfg: cfg, Engines: viewEngines}, false
+		return nil, AdminView{Engines: viewEngines}, false
 	}
-	return engines, AdminView{Cfg: configstore.Config{Engines: engines}, Engines: viewEngines}, true
+	return engines, AdminView{Engines: viewEngines}, true
 }
 
-func parsePairsFromForm(r *http.Request) []configstore.PairConfig {
+func parsePairsFromForm(r *http.Request) []db.Matchup {
 	count, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("pair_count")))
 	if count < 0 {
 		count = 0
 	}
-	seen := make(map[[2]string]bool)
-	pairs := make([]configstore.PairConfig, 0, count)
+	seen := make(map[[2]int64]bool)
+	pairs := make([]db.Matchup, 0, count)
 	for i := 0; i < count; i++ {
-		a := strings.TrimSpace(r.Form.Get(fmt.Sprintf("pair_a_%d", i)))
-		b := strings.TrimSpace(r.Form.Get(fmt.Sprintf("pair_b_%d", i)))
-		if a == "" || b == "" {
+		aStr := strings.TrimSpace(r.Form.Get(fmt.Sprintf("pair_a_%d", i)))
+		bStr := strings.TrimSpace(r.Form.Get(fmt.Sprintf("pair_b_%d", i)))
+		aID, _ := strconv.ParseInt(aStr, 10, 64)
+		bID, _ := strconv.ParseInt(bStr, 10, 64)
+		if aID == 0 || bID == 0 {
 			continue
 		}
 		enabled := r.Form.Get(fmt.Sprintf("pair_enabled_%d", i)) == "on"
 		if !enabled {
 			continue
 		}
-		key := [2]string{minString(a, b), maxString(a, b)}
+		key := [2]int64{minInt(aID, bID), maxInt(aID, bID)}
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
-		pairs = append(pairs, configstore.PairConfig{A: a, B: b})
+		pairs = append(pairs, db.Matchup{EngineAID: key[0], EngineBID: key[1]})
 	}
 	return pairs
 }
@@ -422,20 +562,90 @@ func maxString(a, b string) string {
 	return b
 }
 
+type EngineHeader struct {
+	ID   int64
+	Name string
+}
+
+func buildEngineHeaders(engines []db.Engine) []EngineHeader {
+	headers := make([]EngineHeader, 0, len(engines))
+	for _, e := range engines {
+		headers = append(headers, EngineHeader{ID: e.ID, Name: e.Name})
+	}
+	return headers
+}
+
+func orderEngines(engines []db.Engine, order []string) []db.Engine {
+	byName := make(map[string]db.Engine)
+	for _, e := range engines {
+		byName[e.Name] = e
+	}
+	ordered := make([]db.Engine, 0, len(engines))
+	seen := make(map[string]bool)
+	for _, name := range order {
+		if e, ok := byName[name]; ok {
+			ordered = append(ordered, e)
+			seen[name] = true
+		}
+	}
+	for _, e := range engines {
+		if !seen[e.Name] {
+			ordered = append(ordered, e)
+		}
+	}
+	return ordered
+}
+
+func buildEngineViewsFromList(engines []db.Engine, errByIndex map[int]string, gameCounts map[int64]int, matchupCounts map[int64]int) []EngineView {
+	views := make([]EngineView, 0, len(engines))
+	for i, e := range engines {
+		view := EngineView{
+			ID:       e.ID,
+			Index:    i,
+			Name:     e.Name,
+			Path:     e.Path,
+			Args:     e.Args,
+			Init:     e.Init,
+			Games:    gameCounts[e.ID],
+			Matchups: matchupCounts[e.ID],
+		}
+		if errByIndex != nil {
+			view.Error = errByIndex[i]
+		}
+		views = append(views, view)
+	}
+	return views
+}
+
+func minInt(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 type MatchCell struct {
 	Index   int
-	A       string
-	B       string
+	AID     int64
+	BID     int64
 	Label   string
 	Enabled bool
 }
 
 type MatchRow struct {
-	Engine string
-	Cells  []MatchCell
+	EngineID   int64
+	EngineName string
+	Cells      []MatchCell
 }
 
-func engineNames(engines []configstore.EngineConfig) []string {
+func engineNames(engines []db.Engine) []string {
 	out := make([]string, 0, len(engines))
 	for _, e := range engines {
 		if e.Name == "" {
@@ -446,44 +656,44 @@ func engineNames(engines []configstore.EngineConfig) []string {
 	return out
 }
 
-func buildMatchRows(cfg configstore.Config, names []string) []MatchRow {
-	if len(names) == 0 {
+func buildMatchRows(engines []db.Engine, matchups []db.Matchup) []MatchRow {
+	if len(engines) == 0 {
 		return nil
 	}
-	enabled := make(map[[2]string]bool)
-	for _, p := range cfg.EnabledPairs {
-		a, b := p.A, p.B
+	enabled := make(map[[2]int64]bool)
+	for _, p := range matchups {
+		a, b := p.EngineAID, p.EngineBID
+		if a == 0 || b == 0 {
+			continue
+		}
 		if a > b {
 			a, b = b, a
 		}
-		if a == "" || b == "" {
-			continue
-		}
-		enabled[[2]string{a, b}] = true
+		enabled[[2]int64{a, b}] = true
 	}
-	rows := make([]MatchRow, 0, len(names))
+	rows := make([]MatchRow, 0, len(engines))
 	index := 0
-	for i, rowName := range names {
-		row := MatchRow{Engine: rowName}
-		for j := 0; j < len(names); j++ {
-			colName := names[j]
-			label := rowName
-			if rowName == colName {
-				label = fmt.Sprintf("%s (selfplay)", rowName)
+	for i, rowEng := range engines {
+		row := MatchRow{EngineID: rowEng.ID, EngineName: rowEng.Name}
+		for j := 0; j < len(engines); j++ {
+			colEng := engines[j]
+			label := rowEng.Name
+			if rowEng.ID == colEng.ID {
+				label = fmt.Sprintf("%s (selfplay)", rowEng.Name)
 			} else {
-				label = fmt.Sprintf("%s vs %s", rowName, colName)
+				label = fmt.Sprintf("%s vs %s", rowEng.Name, colEng.Name)
 			}
-			key := [2]string{minString(rowName, colName), maxString(rowName, colName)}
+			key := [2]int64{minInt(rowEng.ID, colEng.ID), maxInt(rowEng.ID, colEng.ID)}
 			row.Cells = append(row.Cells, MatchCell{
 				Index:   index,
-				A:       rowName,
-				B:       colName,
+				AID:     rowEng.ID,
+				BID:     colEng.ID,
 				Label:   label,
 				Enabled: enabled[key],
 			})
 			index++
 		}
-		if i < len(names) {
+		if i < len(engines) {
 			rows = append(rows, row)
 		}
 	}
@@ -498,25 +708,8 @@ func matchCellCount(rows []MatchRow) int {
 	return count
 }
 
-func filterPairs(pairs []configstore.PairConfig, engines []configstore.EngineConfig) []configstore.PairConfig {
-	valid := make(map[string]bool)
-	for _, e := range engines {
-		if e.Name != "" {
-			valid[e.Name] = true
-		}
-	}
-	out := make([]configstore.PairConfig, 0, len(pairs))
-	for _, p := range pairs {
-		if !valid[p.A] || !valid[p.B] {
-			continue
-		}
-		out = append(out, p)
-	}
-	return out
-}
-
-func matchOrder(cfg configstore.Config, ranking []RankingRow) []string {
-	order := engineNames(cfg.Engines)
+func matchOrder(engines []db.Engine, ranking []RankingRow) []string {
+	order := engineNames(engines)
 	if len(order) == 0 {
 		return order
 	}
@@ -544,10 +737,10 @@ func matchOrder(cfg configstore.Config, ranking []RankingRow) []string {
 	return ranked
 }
 
-func matchStrengths(ranking []RankingRow, cfg configstore.Config) map[string]float64 {
+func matchStrengths(ranking []RankingRow, engines []db.Engine) map[string]float64 {
 	strengths := make(map[string]float64)
 	allowed := make(map[string]bool)
-	for _, name := range engineNames(cfg.Engines) {
+	for _, name := range engineNames(engines) {
 		allowed[name] = true
 	}
 	for _, r := range ranking {
@@ -559,7 +752,7 @@ func matchStrengths(ranking []RankingRow, cfg configstore.Config) map[string]flo
 	return strengths
 }
 
-func testEngines(ctx context.Context, engines []configstore.EngineConfig) map[int]string {
+func testEngines(ctx context.Context, engines []db.Engine) map[int]string {
 	errMap := make(map[int]string)
 	for i, e := range engines {
 		if e.Path == "" {

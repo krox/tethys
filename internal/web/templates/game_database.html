@@ -43,7 +43,8 @@
                             <select name="engine">
                                 <option value="">Any</option>
                                 {{range .Search.Engines}}
-                                <option value="{{.}}" {{if eq $.Search.Engine .}}selected{{end}}>{{.}}</option>
+                                <option value="{{.ID}}" {{if eq $.Search.EngineID .ID}}selected{{end}}>{{.Name}}
+                                </option>
                                 {{end}}
                             </select>
                         </div>
@@ -52,7 +53,7 @@
                             <select name="white">
                                 <option value="">Any</option>
                                 {{range .Search.Engines}}
-                                <option value="{{.}}" {{if eq $.Search.White .}}selected{{end}}>{{.}}</option>
+                                <option value="{{.ID}}" {{if eq $.Search.WhiteID .ID}}selected{{end}}>{{.Name}}</option>
                                 {{end}}
                             </select>
                         </div>
@@ -61,7 +62,7 @@
                             <select name="black">
                                 <option value="">Any</option>
                                 {{range .Search.Engines}}
-                                <option value="{{.}}" {{if eq $.Search.Black .}}selected{{end}}>{{.}}</option>
+                                <option value="{{.ID}}" {{if eq $.Search.BlackID .ID}}selected{{end}}>{{.Name}}</option>
                                 {{end}}
                             </select>
                             <label class="check compact" style="margin-top:6px;">
@@ -165,14 +166,14 @@
                             <td>{{.Total}}</td>
                             <td>
                                 <a
-                                    href="/games/matchup.txt?a={{.A | urlquery}}&b={{.B | urlquery}}&movetime={{.MovetimeMS}}">download</a>
+                                    href="/games/matchup.txt?a_id={{.AID}}&b_id={{.BID}}&a={{.A | urlquery}}&b={{.B | urlquery}}&movetime={{.MovetimeMS}}">download</a>
                             </td>
                             {{if $.IsAdmin}}
                             <td>
                                 <form method="post" action="/games/delete"
                                     onsubmit="return confirm('Delete all games for this matchup and movetime?');">
-                                    <input type="hidden" name="a" value="{{.A | html}}" />
-                                    <input type="hidden" name="b" value="{{.B | html}}" />
+                                    <input type="hidden" name="a_id" value="{{.AID}}" />
+                                    <input type="hidden" name="b_id" value="{{.BID}}" />
                                     <input type="hidden" name="movetime" value="{{.MovetimeMS}}" />
                                     <button type="submit" class="danger">delete</button>
                                 </form>

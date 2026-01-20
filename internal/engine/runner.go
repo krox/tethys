@@ -139,15 +139,27 @@ func (r *Runner) loop(parent context.Context) {
 			}
 
 			counts := []db.MatchupCount{}
+			engines := []db.Engine{}
+			matchups := []db.Matchup{}
 			if r.store != nil {
 				if rows, err := r.store.ListMatchupCounts(ctx); err == nil {
 					counts = rows
 				} else {
 					log.Printf("runner: matchup count error: %v", err)
 				}
+				if rows, err := r.store.ListEngines(ctx); err == nil {
+					engines = rows
+				} else {
+					log.Printf("runner: engine list error: %v", err)
+				}
+				if rows, err := r.store.ListMatchups(ctx); err == nil {
+					matchups = rows
+				} else {
+					log.Printf("runner: matchup list error: %v", err)
+				}
 			}
 
-			assignment, nextIdx := selectAssignment(cfg, counts, r.pickIdx)
+			assignment, nextIdx := selectAssignment(cfg, engines, matchups, counts, r.pickIdx)
 			r.pickIdx = nextIdx
 
 			if assignment.White.Path == "" || assignment.Black.Path == "" {
@@ -162,8 +174,8 @@ func (r *Runner) loop(parent context.Context) {
 				return
 			}
 
-			whiteDisplay := assignment.WhiteName
-			blackDisplay := assignment.BlackName
+			whiteDisplay := assignment.White.Name
+			blackDisplay := assignment.Black.Name
 
 			r.seq++
 			r.setLive(func(ls *LiveState) {
@@ -181,7 +193,7 @@ func (r *Runner) loop(parent context.Context) {
 			blackArgs := strings.Fields(assignment.Black.Args)
 
 			white := NewUCIEngine(assignment.White.Path, whiteArgs)
-			selfplay := assignment.WhiteName == assignment.BlackName
+			selfplay := assignment.White.ID == assignment.Black.ID
 			var black *UCIEngine
 			if selfplay {
 				black = white
@@ -251,7 +263,7 @@ func (r *Runner) loop(parent context.Context) {
 				if assignment.MaxPlies > 0 && len(movesUCI) >= assignment.MaxPlies {
 					result := "1/2-1/2"
 					termination := "Max plies"
-					_, err := r.store.InsertFinishedGame(ctx, whiteDisplay, blackDisplay, assignment.MovetimeMS, result, termination, strings.Join(movesUCI, " "), bookPlies)
+					_, err := r.store.InsertFinishedGame(ctx, assignment.White.ID, assignment.Black.ID, assignment.MovetimeMS, result, termination, strings.Join(movesUCI, " "), bookPlies)
 					if err != nil {
 						log.Printf("runner: insert game error: %v", err)
 					}
@@ -265,7 +277,7 @@ func (r *Runner) loop(parent context.Context) {
 
 				if game.Outcome() != chess.NoOutcome {
 					result, termination := outcomeToResult(game)
-					_, err := r.store.InsertFinishedGame(ctx, whiteDisplay, blackDisplay, assignment.MovetimeMS, result, termination, strings.Join(movesUCI, " "), bookPlies)
+					_, err := r.store.InsertFinishedGame(ctx, assignment.White.ID, assignment.Black.ID, assignment.MovetimeMS, result, termination, strings.Join(movesUCI, " "), bookPlies)
 					if err != nil {
 						log.Printf("runner: insert game error: %v", err)
 					}

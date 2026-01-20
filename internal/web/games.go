@@ -16,6 +16,8 @@ import (
 )
 
 type MatchupRow struct {
+	AID        int64
+	BID        int64
 	A          string
 	B          string
 	MovetimeMS int
@@ -51,9 +53,9 @@ type OpeningRow struct {
 }
 
 type SearchView struct {
-	Engine       string
-	White        string
-	Black        string
+	EngineID     int64
+	WhiteID      int64
+	BlackID      int64
 	AllowSwap    bool
 	Movetime     string
 	Result       string
@@ -61,7 +63,7 @@ type SearchView struct {
 	Limit        int
 	Total        int
 	Rows         []SearchRow
-	Engines      []string
+	Engines      []db.Engine
 	Results      []string
 	Terminations []string
 }
@@ -100,6 +102,8 @@ func (h *Handler) handleGames(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		rows = append(rows, MatchupRow{
+			AID:        m.AID,
+			BID:        m.BID,
 			A:          m.A,
 			B:          m.B,
 			MovetimeMS: m.MovetimeMS,
@@ -150,7 +154,7 @@ func (h *Handler) handleGames(w http.ResponseWriter, r *http.Request) {
 
 func buildSearchView(ctx context.Context, store *db.Store, r *http.Request) (SearchView, error) {
 	q := r.URL.Query()
-	engine := strings.TrimSpace(q.Get("engine"))
+	engineID, _ := strconv.ParseInt(strings.TrimSpace(q.Get("engine")), 10, 64)
 	result := strings.TrimSpace(q.Get("result"))
 	termination := strings.TrimSpace(q.Get("termination"))
 	movetimeStr := strings.TrimSpace(q.Get("movetime"))
@@ -167,14 +171,14 @@ func buildSearchView(ctx context.Context, store *db.Store, r *http.Request) (Sea
 		}
 	}
 
-	white := strings.TrimSpace(q.Get("white"))
-	black := strings.TrimSpace(q.Get("black"))
+	whiteID, _ := strconv.ParseInt(strings.TrimSpace(q.Get("white")), 10, 64)
+	blackID, _ := strconv.ParseInt(strings.TrimSpace(q.Get("black")), 10, 64)
 	allowSwap := q.Get("swap") == "on"
 
 	filter := db.GameSearchFilter{
-		Engine:      engine,
-		White:       white,
-		Black:       black,
+		EngineID:    engineID,
+		WhiteID:     whiteID,
+		BlackID:     blackID,
 		AllowSwap:   allowSwap,
 		MovetimeMS:  movetime,
 		Result:      result,
@@ -205,9 +209,9 @@ func buildSearchView(ctx context.Context, store *db.Store, r *http.Request) (Sea
 		searchRows = append(searchRows, SearchRow{GameDetail: row, Plies: plies})
 	}
 	return SearchView{
-		Engine:       engine,
-		White:        white,
-		Black:        black,
+		EngineID:     engineID,
+		WhiteID:      whiteID,
+		BlackID:      blackID,
 		AllowSwap:    allowSwap,
 		Movetime:     movetimeStr,
 		Result:       result,
@@ -494,11 +498,13 @@ func buildGameView(game db.GameDetail) (GameView, error) {
 }
 
 func (h *Handler) handleMatchupMoves(w http.ResponseWriter, r *http.Request) {
-	a := strings.TrimSpace(r.URL.Query().Get("a"))
-	b := strings.TrimSpace(r.URL.Query().Get("b"))
+	aIDStr := strings.TrimSpace(r.URL.Query().Get("a_id"))
+	bIDStr := strings.TrimSpace(r.URL.Query().Get("b_id"))
+	aName := strings.TrimSpace(r.URL.Query().Get("a"))
+	bName := strings.TrimSpace(r.URL.Query().Get("b"))
 	movetimeStr := strings.TrimSpace(r.URL.Query().Get("movetime"))
-	if a == "" || b == "" || movetimeStr == "" {
-		http.Error(w, "missing a/b/movetime", http.StatusBadRequest)
+	if movetimeStr == "" {
+		http.Error(w, "missing movetime", http.StatusBadRequest)
 		return
 	}
 	movetime, err := strconv.Atoi(movetimeStr)
@@ -506,12 +512,58 @@ func (h *Handler) handleMatchupMoves(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid movetime", http.StatusBadRequest)
 		return
 	}
-	lines, err := h.store.MatchupMovesLines(r.Context(), a, b, movetime)
+
+	aID := int64(0)
+	if aIDStr != "" {
+		if v, err := strconv.ParseInt(aIDStr, 10, 64); err == nil {
+			aID = v
+		}
+	}
+	bID := int64(0)
+	if bIDStr != "" {
+		if v, err := strconv.ParseInt(bIDStr, 10, 64); err == nil {
+			bID = v
+		}
+	}
+
+	if aID == 0 && aName != "" {
+		id, err := h.store.EngineIDByName(r.Context(), aName)
+		if err == nil {
+			aID = id
+		}
+	}
+	if bID == 0 && bName != "" {
+		id, err := h.store.EngineIDByName(r.Context(), bName)
+		if err == nil {
+			bID = id
+		}
+	}
+	if aID == 0 || bID == 0 {
+		http.Error(w, "missing a_id/b_id", http.StatusBadRequest)
+		return
+	}
+	lines, err := h.store.MatchupMovesLines(r.Context(), aID, bID, movetime)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	filename := fmt.Sprintf("matchup-%s-vs-%s-%dms.txt", a, b, movetime)
+	if aName == "" {
+		if eng, err := h.store.EngineByID(r.Context(), aID); err == nil {
+			aName = eng.Name
+		}
+	}
+	if bName == "" {
+		if eng, err := h.store.EngineByID(r.Context(), bID); err == nil {
+			bName = eng.Name
+		}
+	}
+	if aName == "" {
+		aName = "engine"
+	}
+	if bName == "" {
+		bName = "engine"
+	}
+	filename := fmt.Sprintf("matchup-%s-vs-%s-%dms.txt", aName, bName, movetime)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", sanitizeFilename(filename)))
 	_, _ = w.Write([]byte(lines))
@@ -522,11 +574,11 @@ func (h *Handler) handleMatchupDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	a := strings.TrimSpace(r.Form.Get("a"))
-	b := strings.TrimSpace(r.Form.Get("b"))
+	aIDStr := strings.TrimSpace(r.Form.Get("a_id"))
+	bIDStr := strings.TrimSpace(r.Form.Get("b_id"))
 	movetimeStr := strings.TrimSpace(r.Form.Get("movetime"))
-	if a == "" || b == "" || movetimeStr == "" {
-		http.Error(w, "missing a/b/movetime", http.StatusBadRequest)
+	if movetimeStr == "" {
+		http.Error(w, "missing movetime", http.StatusBadRequest)
 		return
 	}
 	movetime, err := strconv.Atoi(movetimeStr)
@@ -534,7 +586,17 @@ func (h *Handler) handleMatchupDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid movetime", http.StatusBadRequest)
 		return
 	}
-	if _, err := h.store.DeleteMatchupGames(r.Context(), a, b, movetime); err != nil {
+	aID, err := strconv.ParseInt(aIDStr, 10, 64)
+	if err != nil || aID == 0 {
+		http.Error(w, "invalid a_id", http.StatusBadRequest)
+		return
+	}
+	bID, err := strconv.ParseInt(bIDStr, 10, 64)
+	if err != nil || bID == 0 {
+		http.Error(w, "invalid b_id", http.StatusBadRequest)
+		return
+	}
+	if _, err := h.store.DeleteMatchupGames(r.Context(), aID, bID, movetime); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
