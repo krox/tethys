@@ -148,7 +148,17 @@ func (h *Handler) handleAdminMatchesSave(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	matchups := parsePairsFromForm(r)
+	cfg, err := h.conf.GetConfig(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	rulesetID, err := h.store.EnsureDefaultRuleset(r.Context(), cfg.MovetimeMS, cfg.MaxPlies, cfg.BookPath, cfg.BookMaxPlies)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	matchups := parsePairsFromForm(r, rulesetID)
 	if err := h.store.ReplaceMatchups(r.Context(), matchups); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -407,7 +417,7 @@ func buildAdminView(cfg configstore.Config, engines []db.Engine, matchups []db.M
 
 	enabled := make(map[[2]int64]bool)
 	for _, p := range matchups {
-		a, b := p.EngineAID, p.EngineBID
+		a, b := p.PlayerAID, p.PlayerBID
 		if a == 0 || b == 0 {
 			continue
 		}
@@ -519,7 +529,7 @@ func parseEnginesFromForm(r *http.Request) ([]db.Engine, AdminView, bool) {
 	return engines, AdminView{Engines: viewEngines}, true
 }
 
-func parsePairsFromForm(r *http.Request) []db.Matchup {
+func parsePairsFromForm(r *http.Request, rulesetID int64) []db.Matchup {
 	count, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("pair_count")))
 	if count < 0 {
 		count = 0
@@ -543,7 +553,7 @@ func parsePairsFromForm(r *http.Request) []db.Matchup {
 			continue
 		}
 		seen[key] = true
-		pairs = append(pairs, db.Matchup{EngineAID: key[0], EngineBID: key[1]})
+		pairs = append(pairs, db.Matchup{PlayerAID: key[0], PlayerBID: key[1], RulesetID: rulesetID})
 	}
 	return pairs
 }
@@ -662,7 +672,7 @@ func buildMatchRows(engines []db.Engine, matchups []db.Matchup) []MatchRow {
 	}
 	enabled := make(map[[2]int64]bool)
 	for _, p := range matchups {
-		a, b := p.EngineAID, p.EngineBID
+		a, b := p.PlayerAID, p.PlayerBID
 		if a == 0 || b == 0 {
 			continue
 		}
