@@ -24,11 +24,12 @@ type Handler struct {
 	b     *engine.Broadcaster
 
 	adminToken string
+	uploadDir  string
 
 	tpl *template.Template
 }
 
-func NewHandler(store *db.Store, conf *configstore.Store, r *engine.Runner, b *engine.Broadcaster, adminToken string) *Handler {
+func NewHandler(store *db.Store, conf *configstore.Store, r *engine.Runner, b *engine.Broadcaster, adminToken string, uploadDir string) *Handler {
 	tpl := template.Must(template.New("base").ParseFS(templatesFS, "templates/*.html"))
 	return &Handler{
 		store:      store,
@@ -36,6 +37,7 @@ func NewHandler(store *db.Store, conf *configstore.Store, r *engine.Runner, b *e
 		r:          r,
 		b:          b,
 		adminToken: adminToken,
+		uploadDir:  uploadDir,
 		tpl:        tpl,
 	}
 }
@@ -73,6 +75,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/matches", h.requireAdmin(h.handleAdminMatchesSave))
 	mux.HandleFunc("GET /admin/engines", h.requireAdmin(h.handleAdminEngines))
 	mux.HandleFunc("POST /admin/engines", h.requireAdmin(h.handleAdminEnginesSave))
+	mux.HandleFunc("POST /admin/engines/add-external", h.requireAdmin(h.handleAdminEngineAddExternal))
+	mux.HandleFunc("POST /admin/engines/upload", h.requireAdmin(h.handleAdminEngineUpload))
 	mux.HandleFunc("POST /admin/engines/prune", h.requireAdmin(h.handleAdminEnginePrune))
 	mux.HandleFunc("POST /admin/logout", h.requireAdmin(h.handleAdminLogout))
 }

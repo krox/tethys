@@ -34,30 +34,43 @@
             <h1>Engine Settings</h1>
 
             <div class="card">
+                <div class="engine-actions-bar">
+                    <form method="post" action="/admin/engines/upload" enctype="multipart/form-data"
+                        class="engine-upload-form form">
+                        <input type="file" name="engine_upload" id="engine_upload_input" class="hidden" />
+                        <button type="button" id="upload_engine_btn">Upload engine</button>
+                    </form>
+                    <button type="button" id="add_external_btn">Add external</button>
+                </div>
+                <dialog id="external_engine_dialog" class="engine-dialog">
+                    <form method="post" action="/admin/engines/add-external" class="form">
+                        <h3>Add external engine</h3>
+                        <label>Engine path</label>
+                        <input name="engine_path" placeholder="/usr/games/stockfish" required />
+                        <label>Display name (optional)</label>
+                        <input name="engine_name" placeholder="stockfish" />
+                        <div class="row">
+                            <button type="submit">Add</button>
+                            <button type="button" id="external_cancel_btn">Cancel</button>
+                        </div>
+                    </form>
+                </dialog>
                 <form method="post" action="/admin/engines" class="form">
                     <input type="hidden" name="engine_count" id="engine_count" value="{{len .Engines}}" />
                     <div id="engine_list">
                         {{range .Engines}}
                         <div class="engine-card" data-index="{{.Index}}">
                             <input type="hidden" name="engine_id_{{.Index}}" value="{{.ID}}" />
-                            <div class="engine-row">
-                                <div>
-                                    <label>Name (id={{.ID}})</label>
+                            <input type="hidden" name="engine_source_{{.Index}}" data-field="source"
+                                value="{{.Source}}" />
+                            <input type="hidden" name="engine_path_{{.Index}}" data-field="path"
+                                value="{{if eq .Source " upload"}}{{.StoredPath}}{{else}}{{.Path}}{{end}}" />
+                            <div class="engine-top">
+                                <div class="engine-row">
+                                    <span>#{{.ID}}</span>
                                     <input name="engine_name_{{.Index}}" data-field="name" value="{{.Name}}"
                                         placeholder="unique name" />
                                 </div>
-                                <div>
-                                    <label>Path</label>
-                                    <input name="engine_path_{{.Index}}" data-field="path" value="{{.Path}}"
-                                        placeholder="/usr/games/stockfish" />
-                                </div>
-                                <div>
-                                    <label>Args</label>
-                                    <input name="engine_args_{{.Index}}" data-field="args" value="{{.Args}}"
-                                        placeholder="" />
-                                </div>
-                            </div>
-                            <div class="engine-head">
                                 <div class="engine-actions">
                                     <div class="engine-actions-row">
                                         <button type="button" class="duplicate-engine">Duplicate</button>
@@ -70,24 +83,32 @@
                                             Delete games/matchups
                                         </button>
                                     </div>
-                                    <div class="engine-meta">
-                                        <span class="hint engine-count engine-count-games">{{.Games}} games</span>
-                                        <span class="hint engine-count engine-count-matchups">{{.Matchups}}
-                                            matchups</span>
-                                        {{if .Error}}<span class="error">{{.Error}}</span>{{end}}
-                                    </div>
-                                </div>
-                                <div class="engine-init">
-                                    <label>Init commands</label>
-                                    <textarea name="engine_init_{{.Index}}" data-field="init"
-                                        rows="3">{{.Init}}</textarea>
+
                                 </div>
                             </div>
+                            <div class="engine-row">
+                                <div>
+                                    <label>Init commands</label>
+                                    <textarea name="engine_init_{{.Index}}" data-field="init"
+                                        rows="2">{{.Init}}</textarea>
+                                </div>
+                                <div>
+                                    <label>Args</label>
+                                    <input name="engine_args_{{.Index}}" data-field="args" value="{{.Args}}"
+                                        placeholder="" />
+                                </div>
+                            </div>
+
+                            <div class="engine-meta">
+                                <span class="hint">{{.Games}} games</span>
+                                <span class="hint">{{.Matchups}}matchups</span>
+                                <span class="hint">{{if eq .Source "upload"}}Uploaded:
+                                    {{.UploadName}}{{else}}Path:{{.Path}}{{end}}</span>
+                                {{if .Error}}<span class="error">{{.Error}}</span>{{end}}
+                            </div>
+
                         </div>
                         {{end}}
-                    </div>
-                    <div class="row">
-                        <button type="button" id="add_engine">Add engine</button>
                     </div>
                     <div class="row">
                         <button type="submit">Save</button>
@@ -105,72 +126,6 @@
         (function () {
             const list = document.getElementById('engine_list');
             const countEl = document.getElementById('engine_count');
-            const addBtn = document.getElementById('add_engine');
-
-            function newEngineRow(index) {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'engine-card';
-                wrapper.dataset.index = String(index);
-                wrapper.innerHTML = `
-                    <div class="engine-head">
-                        <div class="engine-actions">
-                            <div class="engine-actions-row">
-                                <button type="button" class="duplicate-engine">Duplicate</button>
-                                <button type="button" class="delete-engine">Delete</button>
-                                <button type="submit" class="danger" formaction="/admin/engines/prune" formmethod="post" name="engine_id" value="">
-                                    Delete games/matchups
-                                </button>
-                            </div>
-                            <div class="engine-meta">
-                                <span class="hint engine-count engine-count-games">0 games</span>
-                                <span class="hint engine-count engine-count-matchups">0 matchups</span>
-                            </div>
-                        </div>
-                        <div class="engine-init">
-                            <label>Init commands</label>
-                            <textarea name="engine_init_${index}" data-field="init" rows="3"></textarea>
-                        </div>
-                    </div>
-                    <input type="hidden" name="engine_id_${index}" value="" />
-                    <div class="engine-row">
-                        <div>
-                            <label>Name (id=new)</label>
-                            <input name="engine_name_${index}" data-field="name" value="" placeholder="unique name" />
-                        </div>
-                        <div>
-                            <label>Path</label>
-                            <input name="engine_path_${index}" data-field="path" value="" placeholder="/usr/games/stockfish" />
-                        </div>
-                        <div>
-                            <label>Args</label>
-                            <input name="engine_args_${index}" data-field="args" value="" placeholder="" />
-                        </div>
-                    </div>
-                `;
-                return wrapper;
-            }
-
-            function collectNames() {
-                const names = [];
-                list.querySelectorAll('input[data-field="name"]').forEach((el) => {
-                    const value = (el.value || '').trim();
-                    if (value) names.push(value);
-                });
-                return names;
-            }
-
-            function uniqueName(base) {
-                const names = collectNames();
-                if (!names.includes(base)) return base;
-                let n = 2;
-                let candidate = `${base.replace(/\s*\(copy\s*\d*\)\s*$/i, '')} (copy ${n})`;
-                while (names.includes(candidate)) {
-                    n++;
-                    candidate = `${base.replace(/\s*\(copy\s*\d*\)\s*$/i, '')} (copy ${n})`;
-                }
-                return candidate;
-            }
-
             function syncIndices() {
                 const cards = Array.from(list.querySelectorAll('.engine-card'));
                 cards.forEach((card, index) => {
@@ -191,6 +146,8 @@
             function bindCardActions(card) {
                 const del = card.querySelector('.delete-engine');
                 const dup = card.querySelector('.duplicate-engine');
+
+                if (!del || !dup) return;
 
                 del.addEventListener('click', () => {
                     if (del.disabled) return;
@@ -217,7 +174,7 @@
                     if (matchupsEl) matchupsEl.textContent = '0 matchups';
 
                     const baseName = nameInput && nameInput.value ? `${nameInput.value.trim()} (copy)` : 'engine (copy)';
-                    if (nameInput) nameInput.value = uniqueName(baseName);
+                    if (nameInput) nameInput.value = baseName;
 
                     list.appendChild(clone);
                     syncIndices();
@@ -225,13 +182,25 @@
                 });
             }
 
-            addBtn.addEventListener('click', function () {
-                const index = parseInt(countEl.value || '0', 10);
-                const card = newEngineRow(index);
-                list.appendChild(card);
-                syncIndices();
-                bindCardActions(card);
-            });
+            const uploadInput = document.getElementById('engine_upload_input');
+            const uploadBtn = document.getElementById('upload_engine_btn');
+            if (uploadBtn && uploadInput) {
+                uploadBtn.addEventListener('click', () => uploadInput.click());
+                uploadInput.addEventListener('change', () => {
+                    if (!uploadInput.files || uploadInput.files.length === 0) return;
+                    uploadInput.closest('form')?.submit();
+                });
+            }
+
+            const externalBtn = document.getElementById('add_external_btn');
+            const externalDialog = document.getElementById('external_engine_dialog');
+            const externalCancel = document.getElementById('external_cancel_btn');
+            if (externalBtn && externalDialog) {
+                externalBtn.addEventListener('click', () => externalDialog.showModal());
+            }
+            if (externalCancel && externalDialog) {
+                externalCancel.addEventListener('click', () => externalDialog.close());
+            }
 
             list.querySelectorAll('.engine-card').forEach((card) => bindCardActions(card));
             syncIndices();

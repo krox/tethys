@@ -108,6 +108,27 @@ a:hover {
     padding: 14px;
 }
 
+.engine-actions-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.engine-actions-bar form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.engine-actions-bar input {
+    min-width: 220px;
+    width: auto;
+    margin-top: 0;
+}
+
 .grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -361,11 +382,45 @@ button[disabled] {
     background: rgba(0, 0, 0, 0.15);
 }
 
-.engine-head {
+.engine-readonly {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px dashed rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.18);
+    color: var(--text);
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+}
+
+.engine-dialog {
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    border-radius: 12px;
+    padding: 16px;
+    max-width: 520px;
+    width: min(90vw, 520px);
+}
+
+.engine-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.hidden {
+    display: none !important;
+}
+
+.engine-top {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    grid-template-columns: 1fr auto;
+    gap: 10px 14px;
     align-items: start;
+}
+
+
+.engine-field.hidden {
+    display: none;
 }
 
 .engine-actions {
@@ -387,9 +442,14 @@ button[disabled] {
 }
 
 .engine-row {
-    display: grid;
-    grid-template-columns: 1fr 2fr 1fr;
-    gap: 10px 12px;
+    display: flex;
+    /*grid-template-columns: 1.2fr 0.9fr 2fr 1.6fr 1fr;*/
+    gap: 8px 12px;
+    margin-top: 0;
+    align-items: end;
+}
+
+.engine-init {
     margin-top: 8px;
 }
 
@@ -453,20 +513,9 @@ button[disabled] {
     transform: scale(1.1);
 }
 
-.engine-grid {
-    display: grid;
-    grid-template-columns: 1fr 2fr 1fr;
-    gap: 10px 12px;
-    margin-top: 8px;
-}
-
-.engine-grid .engine-init {
-    grid-column: 1 / -1;
-}
 
 @media (max-width: 1100px) {
 
-    .engine-grid,
     .engine-row {
         grid-template-columns: 1fr 1fr;
     }
@@ -474,12 +523,11 @@ button[disabled] {
 
 @media (max-width: 720px) {
 
-    .engine-grid,
     .engine-row {
         grid-template-columns: 1fr;
     }
 
-    .engine-head {
+    .engine-top {
         grid-template-columns: 1fr;
     }
 }

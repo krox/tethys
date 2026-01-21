@@ -32,6 +32,9 @@ func New(cfg config.Config) (*App, error) {
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
+	if err := os.MkdirAll(cfg.EngineUploadDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create engine upload dir: %w", err)
+	}
 
 	adminToken, _, err := loadOrInitAdminToken(cfg.DataDir)
 	if err != nil {
@@ -62,7 +65,7 @@ func New(cfg config.Config) (*App, error) {
 	r := engine.NewRunner(gameStore, configStore, b)
 	r.Start(context.Background())
 
-	h := web.NewHandler(gameStore, configStore, r, b, adminToken)
+	h := web.NewHandler(gameStore, configStore, r, b, adminToken, cfg.EngineUploadDir)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
@@ -132,28 +135,7 @@ func ensureEnginesInDB(store *db.Store, conf *configstore.Store) error {
 		return nil
 	}
 
-	stockfishPath := firstExistingPath([]string{
-		"/usr/games/stockfish",
-		"/usr/bin/stockfish",
-		"/bin/stockfish",
-	})
-	if stockfishPath == "" {
-		return nil
-	}
-	_, err = store.InsertEngine(ctx, db.Engine{
-		Name: "stockfish",
-		Path: stockfishPath,
-	})
-	return err
-}
-
-func firstExistingPath(candidates []string) string {
-	for _, p := range candidates {
-		if st, err := os.Stat(p); err == nil && !st.IsDir() {
-			return p
-		}
-	}
-	return ""
+	return nil
 }
 
 func engineDisplayName(path string, fallback string) string {
