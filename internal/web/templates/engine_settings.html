@@ -73,7 +73,9 @@
                                 </div>
                                 <div class="engine-actions">
                                     <div class="engine-actions-row">
-                                        <button type="button" class="duplicate-engine">Duplicate</button>
+                                        <button type="submit" class="duplicate-engine"
+                                            formaction="/admin/engines/duplicate" formmethod="post" name="engine_id"
+                                            value="{{.ID}}">Duplicate</button>
                                         <button type="button" class="delete-engine" {{if or (gt .Games 0) (gt .Matchups
                                             0)}}disabled{{end}}>
                                             Delete
@@ -145,40 +147,12 @@
 
             function bindCardActions(card) {
                 const del = card.querySelector('.delete-engine');
-                const dup = card.querySelector('.duplicate-engine');
-
-                if (!del || !dup) return;
+                if (!del) return;
 
                 del.addEventListener('click', () => {
                     if (del.disabled) return;
                     card.remove();
                     syncIndices();
-                });
-
-                dup.addEventListener('click', () => {
-                    const clone = card.cloneNode(true);
-                    const nameInput = clone.querySelector('input[data-field="name"]');
-                    const errorEl = clone.querySelector('.error');
-                    const idInput = clone.querySelector('input[name^="engine_id_"]');
-                    const nameLabel = clone.querySelector('.engine-row label');
-                    const pruneBtn = clone.querySelector('button[formaction="/admin/engines/prune"]');
-                    const deleteBtn = clone.querySelector('.delete-engine');
-                    const gamesEl = clone.querySelector('.engine-count-games');
-                    const matchupsEl = clone.querySelector('.engine-count-matchups');
-                    if (errorEl) errorEl.remove();
-                    if (idInput) idInput.value = '';
-                    if (nameLabel) nameLabel.textContent = 'Name (id=new)';
-                    if (pruneBtn) pruneBtn.value = '';
-                    if (deleteBtn) deleteBtn.disabled = false;
-                    if (gamesEl) gamesEl.textContent = '0 games';
-                    if (matchupsEl) matchupsEl.textContent = '0 matchups';
-
-                    const baseName = nameInput && nameInput.value ? `${nameInput.value.trim()} (copy)` : 'engine (copy)';
-                    if (nameInput) nameInput.value = baseName;
-
-                    list.appendChild(clone);
-                    syncIndices();
-                    bindCardActions(clone);
                 });
             }
 

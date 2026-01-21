@@ -75,6 +75,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/matches", h.requireAdmin(h.handleAdminMatchesSave))
 	mux.HandleFunc("GET /admin/engines", h.requireAdmin(h.handleAdminEngines))
 	mux.HandleFunc("POST /admin/engines", h.requireAdmin(h.handleAdminEnginesSave))
+	mux.HandleFunc("POST /admin/engines/duplicate", h.requireAdmin(h.handleAdminEngineDuplicate))
 	mux.HandleFunc("POST /admin/engines/add-external", h.requireAdmin(h.handleAdminEngineAddExternal))
 	mux.HandleFunc("POST /admin/engines/upload", h.requireAdmin(h.handleAdminEngineUpload))
 	mux.HandleFunc("POST /admin/engines/prune", h.requireAdmin(h.handleAdminEnginePrune))

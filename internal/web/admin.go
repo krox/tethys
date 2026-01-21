@@ -330,6 +330,42 @@ func (h *Handler) handleAdminEnginePrune(w http.ResponseWriter, r *http.Request)
 	http.Redirect(w, r, "/admin/engines", http.StatusSeeOther)
 }
 
+func (h *Handler) handleAdminEngineDuplicate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	idStr := strings.TrimSpace(r.Form.Get("engine_id"))
+	engineID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || engineID == 0 {
+		http.Error(w, "invalid engine id", http.StatusBadRequest)
+		return
+	}
+	original, err := h.store.EngineByID(r.Context(), engineID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	baseName := fmt.Sprintf("%s (copy)", strings.TrimSpace(original.Name))
+	unique, err := h.uniqueEngineName(r.Context(), baseName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_, err = h.store.InsertEngine(r.Context(), db.Engine{
+		Name:   unique,
+		Source: original.Source,
+		Path:   original.Path,
+		Args:   original.Args,
+		Init:   original.Init,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/admin/engines", http.StatusSeeOther)
+}
+
 func (h *Handler) handleAdminEngineAddExternal(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
