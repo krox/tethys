@@ -41,17 +41,6 @@ type ResultRow struct {
 	Count       int
 }
 
-type OpeningRow struct {
-	Opening string
-	Wins    int
-	Losses  int
-	Draws   int
-	Total   int
-	WinPct  float64
-	LossPct float64
-	DrawPct float64
-}
-
 type SearchView struct {
 	EngineID     int64
 	WhiteID      int64
@@ -62,15 +51,10 @@ type SearchView struct {
 	Termination  string
 	Limit        int
 	Total        int
-	Rows         []SearchRow
+	Rows         []db.GameDetail
 	Engines      []db.Engine
 	Results      []string
 	Terminations []string
-}
-
-type SearchRow struct {
-	db.GameDetail
-	Plies int
 }
 
 func (h *Handler) handleGames(w http.ResponseWriter, r *http.Request) {
@@ -81,11 +65,6 @@ func (h *Handler) handleGames(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resultSummaries, err := h.store.ListResultSummaries(ctx)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	openingRows, err := buildOpeningRows(ctx, h.store)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -143,12 +122,11 @@ func (h *Handler) handleGames(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = h.tpl.ExecuteTemplate(w, "game_database.html", map[string]any{
-		"Rows":        rows,
-		"ResultRows":  buildResultRows(resultSummaries),
-		"OpeningRows": openingRows,
-		"Search":      searchView,
-		"IsAdmin":     h.isAdminRequest(w, r),
-		"Page":        "games",
+		"Rows":       rows,
+		"ResultRows": buildResultRows(resultSummaries),
+		"Search":     searchView,
+		"IsAdmin":    h.isAdminRequest(w, r),
+		"Page":       "games",
 	})
 }
 
@@ -200,14 +178,6 @@ func buildSearchView(ctx context.Context, store *db.Store, r *http.Request) (Sea
 	if err != nil {
 		return SearchView{}, err
 	}
-	searchRows := make([]SearchRow, 0, len(rows))
-	for _, row := range rows {
-		plies := 0
-		if strings.TrimSpace(row.MovesUCI) != "" {
-			plies = len(strings.Fields(row.MovesUCI))
-		}
-		searchRows = append(searchRows, SearchRow{GameDetail: row, Plies: plies})
-	}
 	return SearchView{
 		EngineID:     engineID,
 		WhiteID:      whiteID,
@@ -218,7 +188,7 @@ func buildSearchView(ctx context.Context, store *db.Store, r *http.Request) (Sea
 		Termination:  termination,
 		Limit:        limit,
 		Total:        total,
-		Rows:         searchRows,
+		Rows:         rows,
 		Engines:      engines,
 		Results:      results,
 		Terminations: terminations,
@@ -260,40 +230,6 @@ func (h *Handler) handleResultDownload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	_, _ = w.Write([]byte(lines))
-}
-
-func (h *Handler) handleOpeningDownload(w http.ResponseWriter, r *http.Request) {
-	opening := strings.TrimSpace(r.URL.Query().Get("opening"))
-	if opening == "" {
-		http.Error(w, "missing opening", http.StatusBadRequest)
-		return
-	}
-	lines, err := h.store.OpeningMovesLines(r.Context(), opening)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	filename := fmt.Sprintf("opening-%s.txt", sanitizeFilename(opening))
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
-	_, _ = w.Write([]byte(lines))
-}
-
-func (h *Handler) handleOpeningDelete(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	opening := strings.TrimSpace(r.Form.Get("opening"))
-	if opening == "" {
-		http.Error(w, "missing opening", http.StatusBadRequest)
-		return
-	}
-	if _, err := h.store.DeleteOpeningGames(r.Context(), opening); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, "/games", http.StatusSeeOther)
 }
 
 func buildResultRows(rows []db.ResultSummary) []ResultRow {
@@ -341,63 +277,6 @@ func resultLabel(result, termination string) string {
 		return termination
 	}
 	return "Unfinished"
-}
-
-func buildOpeningRows(ctx context.Context, store *db.Store) ([]OpeningRow, error) {
-	rows, err := store.ListAllMovesWithResult(ctx)
-	if err != nil {
-		return nil, err
-	}
-	counts := make(map[string]*OpeningRow)
-	for _, row := range rows {
-		if row.Result != "1-0" && row.Result != "0-1" && row.Result != "1/2-1/2" {
-			continue
-		}
-		opening := openingKey(row.MovesUCI)
-		entry, ok := counts[opening]
-		if !ok {
-			entry = &OpeningRow{Opening: opening}
-			counts[opening] = entry
-		}
-		switch row.Result {
-		case "1-0":
-			entry.Wins++
-		case "0-1":
-			entry.Losses++
-		case "1/2-1/2":
-			entry.Draws++
-		}
-		entry.Total++
-	}
-
-	out := make([]OpeningRow, 0, len(counts))
-	for _, entry := range counts {
-		if entry.Total == 0 {
-			continue
-		}
-		entry.WinPct = float64(entry.Wins) * 100 / float64(entry.Total)
-		entry.LossPct = float64(entry.Losses) * 100 / float64(entry.Total)
-		entry.DrawPct = float64(entry.Draws) * 100 / float64(entry.Total)
-		out = append(out, *entry)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Total == out[j].Total {
-			return out[i].Opening < out[j].Opening
-		}
-		return out[i].Total > out[j].Total
-	})
-	return out, nil
-}
-
-func openingKey(movesUCI string) string {
-	if strings.TrimSpace(movesUCI) == "" {
-		return "(no moves)"
-	}
-	parts := strings.Fields(movesUCI)
-	if len(parts) >= 2 {
-		return parts[0] + " " + parts[1]
-	}
-	return parts[0]
 }
 
 func (h *Handler) handleGameView(w http.ResponseWriter, r *http.Request) {

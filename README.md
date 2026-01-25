@@ -35,8 +35,11 @@ Environment variables:
 
 - `TETHYS_LISTEN_ADDR` (default `:8080`)
 - `TETHYS_DATA_DIR` (default `./data`)
-- `TETHYS_GAMES_DB_PATH` (default `$TETHYS_DATA_DIR/games.sqlite`)
-- `TETHYS_CONFIG_PATH` (default `$TETHYS_DATA_DIR/config.json`)
+
+Storage locations (relative to `$TETHYS_DATA_DIR`):
+- database: `tethys.sqlite`
+- config: `config.json`
+- uploads: `engine_bins/`
 
 Engine settings are stored in a JSON file and edited in the admin UI.
 

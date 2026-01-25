@@ -220,44 +220,6 @@
                     </tbody>
                 </table>
             </div>
-
-            <div class="card" style="margin-top: 16px;">
-                <h2>By Opening</h2>
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Opening (2 plies)</th>
-                            <th>Games</th>
-                            <th>Win/Draw/Loss</th>
-                            <th>Download</th>
-                            {{if .IsAdmin}}<th>Delete game records</th>{{end}}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {{range .OpeningRows}}
-                        <tr>
-                            <td>{{.Opening}}</td>
-                            <td>{{.Total}}</td>
-                            <td>
-                                {{template "result_bar" .}}
-                            </td>
-                            <td>
-                                <a href="/games/opening.txt?opening={{.Opening | urlquery}}">download</a>
-                            </td>
-                            {{if $.IsAdmin}}
-                            <td>
-                                <form method="post" action="/games/delete-opening"
-                                    onsubmit="return confirm('Delete all games with this opening?');">
-                                    <input type="hidden" name="opening" value="{{.Opening | html}}" />
-                                    <button type="submit" class="danger">delete</button>
-                                </form>
-                            </td>
-                            {{end}}
-                        </tr>
-                        {{end}}
-                    </tbody>
-                </table>
-            </div>
         </main>
     </div>
 

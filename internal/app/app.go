@@ -2,14 +2,11 @@ package app
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"sync"
 
-	"tethys/internal/config"
 	"tethys/internal/configstore"
 	"tethys/internal/db"
 	"tethys/internal/engine"
@@ -17,8 +14,7 @@ import (
 )
 
 type App struct {
-	cfg config.Config
-	db  *sql.DB
+	store *db.Store
 
 	runner *engine.Runner
 	mux    *http.ServeMux
@@ -28,50 +24,38 @@ type App struct {
 	closeOnce sync.Once
 }
 
-func New(cfg config.Config) (*App, error) {
-	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+func New(dataDir string, dbPath string, configPath string, engineUploadDir string) (*App, error) {
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
-	if err := os.MkdirAll(cfg.EngineUploadDir, 0o755); err != nil {
+	if err := os.MkdirAll(engineUploadDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create engine upload dir: %w", err)
 	}
 
-	adminToken, _, err := loadOrInitAdminToken(cfg.DataDir)
+	adminToken, _, err := loadOrInitAdminToken(dataDir)
 	if err != nil {
 		return nil, err
 	}
 
-	sqlDB, err := db.Open(cfg.GamesDBPath)
+	sqlDB, err := db.Open(dbPath)
 	if err != nil {
 		return nil, err
 	}
-
-	if err := db.Migrate(sqlDB); err != nil {
-		_ = sqlDB.Close()
-		return nil, err
-	}
-
-	gameStore := db.NewStore(sqlDB)
-	configStore, err := configstore.New(cfg.ConfigPath)
+	configStore, err := configstore.New(configPath)
 	if err != nil {
-		_ = sqlDB.Close()
-		return nil, err
-	}
-	if err := ensureEnginesInDB(gameStore, configStore); err != nil {
 		_ = sqlDB.Close()
 		return nil, err
 	}
 	b := engine.NewBroadcaster()
-	r := engine.NewRunner(gameStore, configStore, b)
+	r := engine.NewRunner(sqlDB, configStore, b)
 	r.Start(context.Background())
 
-	h := web.NewHandler(gameStore, configStore, r, b, adminToken, cfg.EngineUploadDir)
+	h := web.NewHandler(sqlDB, configStore, r, b, adminToken, engineUploadDir)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
 	return &App{
-		cfg:        cfg,
-		db:         sqlDB,
+		//db:         sqlDB,
 		runner:     r,
 		mux:        mux,
 		adminToken: adminToken,
@@ -89,59 +73,6 @@ func (a *App) AdminToken() string {
 func (a *App) Close() {
 	a.closeOnce.Do(func() {
 		a.runner.Stop()
-		_ = a.db.Close()
+		_ = a.store.Close()
 	})
-}
-
-func ensureEnginesInDB(store *db.Store, conf *configstore.Store) error {
-	ctx := context.Background()
-	engines, err := store.ListEngines(ctx)
-	if err != nil {
-		return err
-	}
-	if len(engines) > 0 {
-		return nil
-	}
-	if conf != nil {
-		cfg, err := conf.GetConfig(ctx)
-		if err != nil {
-			return err
-		}
-		for _, e := range cfg.Engines {
-			if e.Path == "" {
-				continue
-			}
-			name := e.Name
-			if name == "" {
-				name = engineDisplayName(e.Path, "engine")
-			}
-			_, err := store.InsertEngine(ctx, db.Engine{
-				Name: name,
-				Path: e.Path,
-				Args: e.Args,
-				Init: e.Init,
-			})
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	engines, err = store.ListEngines(ctx)
-	if err != nil {
-		return err
-	}
-	if len(engines) > 0 {
-		return nil
-	}
-
-	return nil
-}
-
-func engineDisplayName(path string, fallback string) string {
-	base := filepath.Base(path)
-	if base == "." || base == "/" || base == "" {
-		return fallback
-	}
-	return base
 }

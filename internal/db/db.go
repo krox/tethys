@@ -11,7 +11,61 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func Open(path string) (*sql.DB, error) {
+var schema_stmts = []string{
+	`PRAGMA journal_mode=WAL;`,
+	`PRAGMA foreign_keys=ON;`,
+	`CREATE TABLE IF NOT EXISTS players (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		engine_source TEXT NOT NULL DEFAULT 'external',
+		engine_path TEXT NULL,
+		engine_args TEXT NOT NULL DEFAULT '',
+		engine_init TEXT NOT NULL DEFAULT '',
+		UNIQUE(name)
+	);`,
+	`CREATE TABLE IF NOT EXISTS rulesets (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		movetime_ms INTEGER NOT NULL DEFAULT 100,
+		max_plies INTEGER NOT NULL DEFAULT 400,
+		book_path TEXT NULL DEFAULT NULL,
+		book_max_plies INTEGER NOT NULL DEFAULT 0,
+		UNIQUE(movetime_ms, max_plies, book_path, book_max_plies)
+	);`,
+	`CREATE TABLE IF NOT EXISTS matchups (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		player_a_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+		player_b_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+		ruleset_id INTEGER NOT NULL REFERENCES rulesets(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+		UNIQUE(player_a_id, player_b_id, ruleset_id)
+	);`,
+	`CREATE TABLE IF NOT EXISTS games (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		played_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+		white_player_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+		black_player_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+		ruleset_id INTEGER NOT NULL REFERENCES rulesets(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+		result TEXT,         -- 1-0|0-1|1/2-1/2 (or NULL)
+		termination TEXT,
+		moves_uci TEXT NOT NULL DEFAULT '',
+		ply_count INTEGER NOT NULL GENERATED ALWAYS AS (length(moves_uci) - length(replace(moves_uci, ' ', '')) + CASE WHEN moves_uci = '' THEN 0 ELSE 1 END) STORED,
+		book_plies INTEGER NOT NULL DEFAULT 0
+		CHECK (result IS NULL OR result IN ('1-0', '0-1', '1/2-1/2'))
+		CHECK (trim(moves_uci) = moves_uci)
+	);`,
+	`CREATE INDEX IF NOT EXISTS idx_games_played_at ON games(played_at);`,
+	`CREATE INDEX IF NOT EXISTS idx_games_white_player_id ON games(white_player_id);`,
+	`CREATE INDEX IF NOT EXISTS idx_games_black_player_id ON games(black_player_id);`,
+	`CREATE INDEX IF NOT EXISTS idx_games_matchup ON games(white_player_id, black_player_id, ruleset_id);`,
+	`CREATE INDEX IF NOT EXISTS idx_matchups_player_a_id ON matchups(player_a_id);`,
+	`CREATE INDEX IF NOT EXISTS idx_matchups_player_b_id ON matchups(player_b_id);`,
+	`CREATE INDEX IF NOT EXISTS idx_matchups_ruleset_id ON matchups(ruleset_id);`,
+}
+
+type Store struct {
+	db *sql.DB
+}
+
+func Open(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
@@ -27,75 +81,18 @@ func Open(path string) (*sql.DB, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("ping sqlite: %w", err)
 	}
-	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys=ON;`); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("enable foreign keys: %w", err)
-	}
 
-	return db, nil
-}
-
-func Migrate(db *sql.DB) error {
-	stmts := []string{
-		`PRAGMA journal_mode=WAL;`,
-		`PRAGMA foreign_keys=ON;`,
-		`CREATE TABLE IF NOT EXISTS players (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			display_name TEXT NOT NULL,
-			engine_source TEXT NOT NULL DEFAULT 'external',
-			engine_path TEXT NULL,
-			engine_args TEXT NOT NULL DEFAULT '',
-			engine_init TEXT NOT NULL DEFAULT ''
-		);`,
-		`CREATE TABLE IF NOT EXISTS rulesets (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			movetime_ms INTEGER NOT NULL,
-			max_plies INTEGER NOT NULL,
-			book_path TEXT NULL,
-			book_max_plies INTEGER NOT NULL DEFAULT 0
-		);`,
-		`CREATE TABLE IF NOT EXISTS matchups (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			player_a_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
-			player_b_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
-			ruleset_id INTEGER NOT NULL REFERENCES rulesets(id) ON UPDATE CASCADE ON DELETE RESTRICT,
-			UNIQUE(player_a_id, player_b_id, ruleset_id)
-		);`,
-		`CREATE TABLE IF NOT EXISTS games (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			played_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-			white_player_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
-			black_player_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
-			ruleset_id INTEGER NOT NULL REFERENCES rulesets(id) ON UPDATE CASCADE ON DELETE RESTRICT,
-			result TEXT,         -- 1-0|0-1|1/2-1/2|*
-			termination TEXT,
-			moves_uci TEXT NOT NULL DEFAULT '',
-			book_plies INTEGER NOT NULL DEFAULT 0
-		);`,
-		`CREATE INDEX IF NOT EXISTS idx_games_played_at ON games(played_at);`,
-		`CREATE INDEX IF NOT EXISTS idx_games_white_player_id ON games(white_player_id);`,
-		`CREATE INDEX IF NOT EXISTS idx_games_black_player_id ON games(black_player_id);`,
-		`CREATE INDEX IF NOT EXISTS idx_games_matchup ON games(white_player_id, black_player_id, ruleset_id);`,
-		`CREATE INDEX IF NOT EXISTS idx_matchups_player_a_id ON matchups(player_a_id);`,
-		`CREATE INDEX IF NOT EXISTS idx_matchups_player_b_id ON matchups(player_b_id);`,
-		`CREATE INDEX IF NOT EXISTS idx_matchups_ruleset_id ON matchups(ruleset_id);`,
-	}
-
-	for _, stmt := range stmts {
+	for _, stmt := range schema_stmts {
 		if _, err := db.Exec(stmt); err != nil {
-			return fmt.Errorf("migrate: %w", err)
+			_ = db.Close()
+			return nil, fmt.Errorf("migrate: %w", err)
 		}
 	}
-
-	return nil
+	return &Store{db: db}, nil
 }
 
-type Store struct {
-	db *sql.DB
-}
-
-func NewStore(db *sql.DB) *Store {
-	return &Store{db: db}
+func (s *Store) Close() error {
+	return s.db.Close()
 }
 
 func nullableString(value string) any {
@@ -105,15 +102,16 @@ func nullableString(value string) any {
 	return value
 }
 
-type GameRow struct {
+type GameDetail struct {
 	ID          int64
 	PlayedAt    string
 	White       string
 	Black       string
 	MovetimeMS  int
-	Result      sql.NullString
-	Termination sql.NullString
+	Result      string
+	Termination string
 	MovesUCI    string
+	Plies       int
 	BookPlies   int
 }
 
@@ -146,18 +144,6 @@ type Ruleset struct {
 	BookMaxPlies int
 }
 
-type GameDetail struct {
-	ID          int64
-	PlayedAt    string
-	White       string
-	Black       string
-	MovetimeMS  int
-	Result      string
-	Termination string
-	MovesUCI    string
-	BookPlies   int
-}
-
 type GameSearchFilter struct {
 	EngineID    int64
 	WhiteID     int64
@@ -168,6 +154,7 @@ type GameSearchFilter struct {
 	Termination string
 }
 
+// Add a finished game to the database. Returns the inserted games ID.
 func (s *Store) InsertFinishedGame(ctx context.Context, whiteID int64, blackID int64, rulesetID int64, result, termination, movesUCI string, bookPlies int) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `
 		INSERT INTO games (white_player_id, black_player_id, ruleset_id, result, termination, moves_uci, book_plies)
@@ -183,12 +170,10 @@ func (s *Store) InsertFinishedGame(ctx context.Context, whiteID int64, blackID i
 	return id, nil
 }
 
-func (s *Store) LatestGame(ctx context.Context) (GameRow, error) {
+// find the most recent game in the database
+func (s *Store) LatestGame(ctx context.Context) (GameDetail, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT g.id, g.played_at,
-		       COALESCE(w.display_name, ''),
-		       COALESCE(b.display_name, ''),
-		       r.movetime_ms, g.result, g.termination, g.moves_uci, g.book_plies
+		SELECT g.id, g.played_at, w.name, b.name, r.movetime_ms, g.result, g.termination, g.moves_uci, g.ply_count, g.book_plies
 		FROM games g
 		LEFT JOIN players w ON g.white_player_id = w.id
 		LEFT JOIN players b ON g.black_player_id = b.id
@@ -196,26 +181,24 @@ func (s *Store) LatestGame(ctx context.Context) (GameRow, error) {
 		ORDER BY g.id DESC
 		LIMIT 1
 	`)
-	var gr GameRow
+	var gr GameDetail
 	if err := row.Scan(
 		&gr.ID, &gr.PlayedAt,
 		&gr.White, &gr.Black, &gr.MovetimeMS,
-		&gr.Result, &gr.Termination, &gr.MovesUCI, &gr.BookPlies,
+		&gr.Result, &gr.Termination, &gr.MovesUCI, &gr.Plies, &gr.BookPlies,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return GameRow{}, sql.ErrNoRows
+			return GameDetail{}, sql.ErrNoRows
 		}
-		return GameRow{}, err
+		return GameDetail{}, err
 	}
 	return gr, nil
 }
 
-func (s *Store) ListFinishedGames(ctx context.Context, limit int) ([]GameRow, error) {
+// list most recent finished games
+func (s *Store) ListFinishedGames(ctx context.Context, limit int) ([]GameDetail, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT g.id, g.played_at,
-		       COALESCE(w.display_name, ''),
-		       COALESCE(b.display_name, ''),
-		       r.movetime_ms, g.result, g.termination, g.moves_uci, g.book_plies
+		SELECT g.id, g.played_at, w.name, b.name, r.movetime_ms, g.result, g.termination, g.moves_uci, g.ply_count, g.book_plies
 		FROM games g
 		LEFT JOIN players w ON g.white_player_id = w.id
 		LEFT JOIN players b ON g.black_player_id = b.id
@@ -228,13 +211,13 @@ func (s *Store) ListFinishedGames(ctx context.Context, limit int) ([]GameRow, er
 	}
 	defer rows.Close()
 
-	var out []GameRow
+	var out []GameDetail
 	for rows.Next() {
-		var gr GameRow
+		var gr GameDetail
 		if err := rows.Scan(
 			&gr.ID, &gr.PlayedAt,
 			&gr.White, &gr.Black, &gr.MovetimeMS,
-			&gr.Result, &gr.Termination, &gr.MovesUCI, &gr.BookPlies,
+			&gr.Result, &gr.Termination, &gr.MovesUCI, &gr.Plies, &gr.BookPlies,
 		); err != nil {
 			return nil, err
 		}
@@ -344,10 +327,7 @@ func (s *Store) GameMoves(ctx context.Context, id int64) (moves, result string, 
 
 func (s *Store) GetGame(ctx context.Context, id int64) (GameDetail, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT g.id, g.played_at,
-		       COALESCE(w.display_name, ''),
-		       COALESCE(b.display_name, ''),
-		       r.movetime_ms, COALESCE(g.result, '*'), COALESCE(g.termination, ''), g.moves_uci, g.book_plies
+		SELECT g.id, g.played_at, w.name, b.name, r.movetime_ms, COALESCE(g.result, '*'), COALESCE(g.termination, ''), g.moves_uci, g.ply_count, g.book_plies
 		FROM games g
 		LEFT JOIN players w ON g.white_player_id = w.id
 		LEFT JOIN players b ON g.black_player_id = b.id
@@ -358,13 +338,14 @@ func (s *Store) GetGame(ctx context.Context, id int64) (GameDetail, error) {
 	if err := row.Scan(
 		&gd.ID, &gd.PlayedAt,
 		&gd.White, &gd.Black, &gd.MovetimeMS,
-		&gd.Result, &gd.Termination, &gd.MovesUCI, &gd.BookPlies,
+		&gd.Result, &gd.Termination, &gd.MovesUCI, &gd.Plies, &gd.BookPlies,
 	); err != nil {
 		return GameDetail{}, err
 	}
 	return gd, nil
 }
 
+// universal search function
 func (s *Store) SearchGames(ctx context.Context, filter GameSearchFilter, limit int) (int, []GameDetail, error) {
 	if limit <= 0 {
 		limit = 20
@@ -412,10 +393,7 @@ func (s *Store) SearchGames(ctx context.Context, filter GameSearchFilter, limit 
 	}
 
 	listQuery := `
-		SELECT g.id, g.played_at,
-		       COALESCE(w.display_name, ''),
-		       COALESCE(b.display_name, ''),
-		       r.movetime_ms, COALESCE(g.result, '*'), COALESCE(g.termination, ''), g.moves_uci, g.book_plies
+		SELECT g.id, g.played_at, w.name, b.name, r.movetime_ms, COALESCE(g.result, '*'), COALESCE(g.termination, ''), g.moves_uci, g.ply_count, g.book_plies
 		FROM games g
 		LEFT JOIN players w ON g.white_player_id = w.id
 		LEFT JOIN players b ON g.black_player_id = b.id
@@ -437,7 +415,7 @@ func (s *Store) SearchGames(ctx context.Context, filter GameSearchFilter, limit 
 		if err := rows.Scan(
 			&gd.ID, &gd.PlayedAt,
 			&gd.White, &gd.Black, &gd.MovetimeMS,
-			&gd.Result, &gd.Termination, &gd.MovesUCI, &gd.BookPlies,
+			&gd.Result, &gd.Termination, &gd.MovesUCI, &gd.Plies, &gd.BookPlies,
 		); err != nil {
 			return 0, nil, err
 		}
@@ -448,7 +426,7 @@ func (s *Store) SearchGames(ctx context.Context, filter GameSearchFilter, limit 
 
 func (s *Store) ListEngines(ctx context.Context) ([]Engine, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, display_name, engine_source, COALESCE(engine_path, ''), engine_args, engine_init
+		SELECT id, name, engine_source, COALESCE(engine_path, ''), engine_args, engine_init
 		FROM players
 		WHERE engine_path IS NOT NULL AND engine_path != ''
 		ORDER BY id ASC
@@ -475,7 +453,7 @@ func (s *Store) InsertEngine(ctx context.Context, e Engine) (int64, error) {
 		source = EngineSourceExternal
 	}
 	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO players (display_name, engine_source, engine_path, engine_args, engine_init)
+		INSERT INTO players (name, engine_source, engine_path, engine_args, engine_init)
 		VALUES (?, ?, ?, ?, ?)
 	`, e.Name, source, nullableString(e.Path), e.Args, e.Init)
 	if err != nil {
@@ -491,7 +469,7 @@ func (s *Store) UpdateEngine(ctx context.Context, e Engine) error {
 	}
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE players
-		SET display_name = ?, engine_source = ?, engine_path = ?, engine_args = ?, engine_init = ?
+		SET name = ?, engine_source = ?, engine_path = ?, engine_args = ?, engine_init = ?
 		WHERE id = ?
 	`, e.Name, source, nullableString(e.Path), e.Args, e.Init, e.ID)
 	return err
@@ -504,7 +482,7 @@ func (s *Store) DeleteEngine(ctx context.Context, id int64) error {
 
 func (s *Store) EngineByID(ctx context.Context, id int64) (Engine, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, display_name, engine_source, COALESCE(engine_path, ''), engine_args, engine_init
+		SELECT id, name, engine_source, COALESCE(engine_path, ''), engine_args, engine_init
 		FROM players
 		WHERE id = ?
 	`, id)
@@ -516,7 +494,7 @@ func (s *Store) EngineByID(ctx context.Context, id int64) (Engine, error) {
 }
 
 func (s *Store) EngineIDByName(ctx context.Context, name string) (int64, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id FROM players WHERE display_name = ?`, name)
+	row := s.db.QueryRowContext(ctx, `SELECT id FROM players WHERE name = ?`, name)
 	var id int64
 	if err := row.Scan(&id); err != nil {
 		return 0, err
@@ -746,10 +724,7 @@ func (s *Store) ListTerminations(ctx context.Context) ([]string, error) {
 
 func (s *Store) ResultsByPair(ctx context.Context) ([]PairResult, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT g.white_player_id, g.black_player_id,
-		       COALESCE(w.display_name, ''),
-		       COALESCE(b.display_name, ''),
-		       COALESCE(g.result, '*') as result,
+		SELECT g.white_player_id, g.black_player_id, w.name, b.name, COALESCE(g.result, '*') as result,
 		       COUNT(*)
 		FROM games g
 		LEFT JOIN players w ON g.white_player_id = w.id
@@ -816,10 +791,7 @@ func (s *Store) ResultsByPair(ctx context.Context) ([]PairResult, error) {
 
 func (s *Store) ListMatchupSummaries(ctx context.Context) ([]MatchupSummary, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT g.white_player_id, g.black_player_id,
-		       COALESCE(w.display_name, ''),
-		       COALESCE(b.display_name, ''),
-		       r.movetime_ms, g.ruleset_id, COALESCE(g.result, '*') as result, COUNT(*)
+		SELECT g.white_player_id, g.black_player_id, w.name, b.name, r.movetime_ms, g.ruleset_id, COALESCE(g.result, '*') as result, COUNT(*)
 		FROM games g
 		LEFT JOIN players w ON g.white_player_id = w.id
 		LEFT JOIN players b ON g.black_player_id = b.id
@@ -1026,95 +998,6 @@ func (s *Store) DeleteResultGames(ctx context.Context, result, termination strin
 		return 0, err
 	}
 	return rows, nil
-}
-
-// OpeningMovesLines returns one line per game for a specific opening key (first 2 plies).
-func (s *Store) OpeningMovesLines(ctx context.Context, opening string) (string, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT moves_uci, result
-		FROM games
-		ORDER BY id ASC
-	`)
-	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
-
-	out := ""
-	for rows.Next() {
-		var moves string
-		var res sql.NullString
-		if err := rows.Scan(&moves, &res); err != nil {
-			return "", err
-		}
-		if openingKeyForMoves(moves) != opening {
-			continue
-		}
-		result := "*"
-		if res.Valid && res.String != "" {
-			result = res.String
-		}
-		if moves != "" {
-			out += moves + " " + result + "\n"
-		} else {
-			out += result + "\n"
-		}
-	}
-	return out, rows.Err()
-}
-
-func (s *Store) DeleteOpeningGames(ctx context.Context, opening string) (int64, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, moves_uci
-		FROM games
-	`)
-	if err != nil {
-		return 0, err
-	}
-	defer rows.Close()
-
-	ids := make([]int64, 0)
-	for rows.Next() {
-		var id int64
-		var moves string
-		if err := rows.Scan(&id, &moves); err != nil {
-			return 0, err
-		}
-		if openingKeyForMoves(moves) == opening {
-			ids = append(ids, id)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
-	if len(ids) == 0 {
-		return 0, nil
-	}
-
-	deleted := int64(0)
-	for _, id := range ids {
-		res, err := s.db.ExecContext(ctx, `DELETE FROM games WHERE id = ?`, id)
-		if err != nil {
-			return deleted, err
-		}
-		count, err := res.RowsAffected()
-		if err != nil {
-			return deleted, err
-		}
-		deleted += count
-	}
-	return deleted, nil
-}
-
-func openingKeyForMoves(movesUCI string) string {
-	if strings.TrimSpace(movesUCI) == "" {
-		return "(no moves)"
-	}
-	parts := strings.Fields(movesUCI)
-	if len(parts) >= 2 {
-		return parts[0] + " " + parts[1]
-	}
-	return parts[0]
 }
 
 // AllFinishedMovesLines returns one line per game: "<moves> <result>".
