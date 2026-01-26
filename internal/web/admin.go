@@ -84,10 +84,6 @@ func (h *Handler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request
 	if movetime <= 0 {
 		movetime = 100
 	}
-	maxPlies, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("max_plies")))
-	if maxPlies <= 0 {
-		maxPlies = 200
-	}
 	openingMin, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("opening_min")))
 	if openingMin <= 0 {
 		openingMin = 20
@@ -98,7 +94,6 @@ func (h *Handler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request
 	}
 
 	cfg.MovetimeMS = movetime
-	cfg.MaxPlies = maxPlies
 	cfg.OpeningMin = openingMin
 	cfg.BookEnabled = r.Form.Get("book_enabled") == "on"
 	cfg.BookPath = strings.TrimSpace(r.Form.Get("book_path"))
@@ -158,7 +153,7 @@ func (h *Handler) handleAdminMatchesSave(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	rulesetID, err := h.store.EnsureDefaultRuleset(r.Context(), cfg.MovetimeMS, cfg.MaxPlies, cfg.BookPath, cfg.BookMaxPlies)
+	rulesetID, err := h.store.EnsureDefaultRuleset(r.Context(), cfg.MovetimeMS, cfg.BookPath, cfg.BookMaxPlies)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

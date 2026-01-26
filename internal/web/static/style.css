@@ -191,6 +191,11 @@ a:hover {
     min-height: 120px;
 }
 
+.move-book {
+    color: var(--accent);
+    font-weight: 600;
+}
+
 .board-frame {
     display: none;
 }

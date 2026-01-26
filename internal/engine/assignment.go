@@ -17,7 +17,6 @@ type ColorAssignment struct {
 	White        db.Engine
 	Black        db.Engine
 	MovetimeMS   int
-	MaxPlies     int
 	BookEnabled  bool
 	BookPath     string
 	BookMaxPlies int
@@ -27,16 +26,12 @@ type ColorAssignment struct {
 func selectAssignment(cfg configstore.Config, engines []db.Engine, matchups []db.Matchup, rulesets map[int64]db.Ruleset, counts []db.MatchupCount, pickIdx int) (ColorAssignment, int) {
 	assign := ColorAssignment{
 		MovetimeMS:   cfg.MovetimeMS,
-		MaxPlies:     cfg.MaxPlies,
 		BookEnabled:  cfg.BookEnabled,
 		BookPath:     cfg.BookPath,
 		BookMaxPlies: cfg.BookMaxPlies,
 	}
 	if assign.MovetimeMS <= 0 {
 		assign.MovetimeMS = 100
-	}
-	if assign.MaxPlies <= 0 {
-		assign.MaxPlies = 200
 	}
 	if assign.BookMaxPlies <= 0 {
 		assign.BookMaxPlies = 16
@@ -121,7 +116,6 @@ func selectAssignment(cfg configstore.Config, engines []db.Engine, matchups []db
 	chosenRuleset := rulesets[chosen.RulesetID]
 	if chosenRuleset.ID != 0 {
 		assign.MovetimeMS = chosenRuleset.MovetimeMS
-		assign.MaxPlies = chosenRuleset.MaxPlies
 		assign.BookPath = chosenRuleset.BookPath
 		assign.BookMaxPlies = chosenRuleset.BookMaxPlies
 		assign.BookEnabled = chosenRuleset.BookPath != ""

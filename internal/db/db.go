@@ -26,10 +26,9 @@ var schema_stmts = []string{
 	`CREATE TABLE IF NOT EXISTS rulesets (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		movetime_ms INTEGER NOT NULL DEFAULT 100,
-		max_plies INTEGER NOT NULL DEFAULT 400,
 		book_path TEXT NULL DEFAULT NULL,
 		book_max_plies INTEGER NOT NULL DEFAULT 0,
-		UNIQUE(movetime_ms, max_plies, book_path, book_max_plies)
+		UNIQUE(movetime_ms, book_path, book_max_plies)
 	);`,
 	`CREATE TABLE IF NOT EXISTS matchups (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -139,7 +138,6 @@ type Matchup struct {
 type Ruleset struct {
 	ID           int64
 	MovetimeMS   int
-	MaxPlies     int
 	BookPath     string
 	BookMaxPlies int
 }
@@ -502,16 +500,16 @@ func (s *Store) EngineIDByName(ctx context.Context, name string) (int64, error) 
 	return id, nil
 }
 
-func (s *Store) EnsureDefaultRuleset(ctx context.Context, movetimeMS int, maxPlies int, bookPath string, bookMaxPlies int) (int64, error) {
+func (s *Store) EnsureDefaultRuleset(ctx context.Context, movetimeMS int, bookPath string, bookMaxPlies int) (int64, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT id FROM rulesets ORDER BY id ASC LIMIT 1`)
 	var id int64
 	if err := row.Scan(&id); err == nil {
 		return id, nil
 	}
 	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO rulesets (movetime_ms, max_plies, book_path, book_max_plies)
-		VALUES (?, ?, ?, ?)
-	`, movetimeMS, maxPlies, nullableString(bookPath), bookMaxPlies)
+		INSERT INTO rulesets (movetime_ms, book_path, book_max_plies)
+		VALUES (?, ?, ?)
+	`, movetimeMS, nullableString(bookPath), bookMaxPlies)
 	if err != nil {
 		return 0, err
 	}
@@ -520,7 +518,7 @@ func (s *Store) EnsureDefaultRuleset(ctx context.Context, movetimeMS int, maxPli
 
 func (s *Store) ListRulesets(ctx context.Context) ([]Ruleset, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, movetime_ms, max_plies, COALESCE(book_path, ''), book_max_plies
+		SELECT id, movetime_ms, COALESCE(book_path, ''), book_max_plies
 		FROM rulesets
 		ORDER BY id ASC
 	`)
@@ -532,7 +530,7 @@ func (s *Store) ListRulesets(ctx context.Context) ([]Ruleset, error) {
 	var out []Ruleset
 	for rows.Next() {
 		var r Ruleset
-		if err := rows.Scan(&r.ID, &r.MovetimeMS, &r.MaxPlies, &r.BookPath, &r.BookMaxPlies); err != nil {
+		if err := rows.Scan(&r.ID, &r.MovetimeMS, &r.BookPath, &r.BookMaxPlies); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -542,12 +540,12 @@ func (s *Store) ListRulesets(ctx context.Context) ([]Ruleset, error) {
 
 func (s *Store) RulesetByID(ctx context.Context, id int64) (Ruleset, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, movetime_ms, max_plies, COALESCE(book_path, ''), book_max_plies
+		SELECT id, movetime_ms, COALESCE(book_path, ''), book_max_plies
 		FROM rulesets
 		WHERE id = ?
 	`, id)
 	var r Ruleset
-	if err := row.Scan(&r.ID, &r.MovetimeMS, &r.MaxPlies, &r.BookPath, &r.BookMaxPlies); err != nil {
+	if err := row.Scan(&r.ID, &r.MovetimeMS, &r.BookPath, &r.BookMaxPlies); err != nil {
 		return Ruleset{}, err
 	}
 	return r, nil

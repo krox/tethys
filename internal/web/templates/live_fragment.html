@@ -21,6 +21,7 @@
         </div>
 
         <h3>Moves (UCI)</h3>
-        <pre class="moves">{{range $i, $m := .MovesUCI}}{{if $i}} {{end}}{{$m}}{{end}}</pre>
+        <pre
+            class="moves">{{range $i, $m := .MovesUCI}}{{if $i}} {{end}}{{if lt $i $.BookPlies}}<span class="move-book">{{$m}}</span>{{else}}{{$m}}{{end}}{{end}}</pre>
     </div>
 </div>

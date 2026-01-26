@@ -25,6 +25,7 @@ type LiveState struct {
 	Status     string
 	Result     string
 	MovesUCI   []string
+	BookPlies  int
 	FEN        string
 	Board      [][]SquareView
 	UpdatedAt  time.Time
@@ -159,7 +160,7 @@ func (r *Runner) loop(parent context.Context) {
 				} else {
 					log.Printf("runner: matchup list error: %v", err)
 				}
-				if id, err := r.store.EnsureDefaultRuleset(ctx, cfg.MovetimeMS, cfg.MaxPlies, cfg.BookPath, cfg.BookMaxPlies); err == nil {
+				if id, err := r.store.EnsureDefaultRuleset(ctx, cfg.MovetimeMS, cfg.BookPath, cfg.BookMaxPlies); err == nil {
 					defaultRulesetID = id
 				} else {
 					log.Printf("runner: default ruleset error: %v", err)
@@ -179,7 +180,6 @@ func (r *Runner) loop(parent context.Context) {
 				assignment.RulesetID = defaultRulesetID
 				if rs, ok := rulesets[defaultRulesetID]; ok {
 					assignment.MovetimeMS = rs.MovetimeMS
-					assignment.MaxPlies = rs.MaxPlies
 					assignment.BookPath = rs.BookPath
 					assignment.BookMaxPlies = rs.BookMaxPlies
 					assignment.BookEnabled = rs.BookPath != ""
@@ -210,6 +210,7 @@ func (r *Runner) loop(parent context.Context) {
 				ls.Status = "running"
 				ls.Result = "*"
 				ls.MovesUCI = nil
+				ls.BookPlies = 0
 			})
 			r.b.Publish()
 
@@ -268,13 +269,34 @@ func (r *Runner) loop(parent context.Context) {
 			}
 
 			game := chess.NewGame()
+			movesUCI := make([]string, 0, 256)
+			bookPlies := 0
+
+			bookMoves := r.bookLine(game.Position(), assignment)
+			if len(bookMoves) > 0 {
+				n := chess.UCINotation{}
+				for _, move := range bookMoves {
+					mv, err := n.Decode(game.Position(), move)
+					if err != nil {
+						log.Printf("runner: book move decode error: %v", err)
+						break
+					}
+					if err := game.Move(mv); err != nil {
+						log.Printf("runner: book move apply error: %v", err)
+						break
+					}
+					movesUCI = append(movesUCI, move)
+				}
+				bookPlies = len(movesUCI)
+			}
+
 			r.setLive(func(ls *LiveState) {
 				ls.FEN = game.Position().String()
 				ls.Board = boardFromPosition(game.Position())
+				ls.MovesUCI = append([]string(nil), movesUCI...)
+				ls.BookPlies = bookPlies
 			})
 			r.b.Publish()
-			movesUCI := make([]string, 0, 256)
-			bookPlies := 0
 
 			for {
 				select {
@@ -284,7 +306,7 @@ func (r *Runner) loop(parent context.Context) {
 				default:
 				}
 
-				if assignment.MaxPlies > 0 && len(movesUCI) >= assignment.MaxPlies {
+				if len(movesUCI) >= 400 {
 					result := "1/2-1/2"
 					termination := "Max plies"
 					_, err := r.store.InsertFinishedGame(ctx, assignment.White.ID, assignment.Black.ID, assignment.RulesetID, result, termination, strings.Join(movesUCI, " "), bookPlies)
@@ -297,6 +319,17 @@ func (r *Runner) loop(parent context.Context) {
 					})
 					r.b.Publish()
 					return
+				}
+
+				// Claim draws by 3-fold repetition or 50-move rule (instead of waiting for automatic
+				// 5-fold or 75-move).
+				if game.Outcome() == chess.NoOutcome {
+					for _, method := range game.EligibleDraws() {
+						if method == chess.ThreefoldRepetition || method == chess.FiftyMoveRule {
+							_ = game.Draw(method)
+							break
+						}
+					}
 				}
 
 				if game.Outcome() != chess.NoOutcome {
@@ -321,16 +354,10 @@ func (r *Runner) loop(parent context.Context) {
 					eng = black
 				}
 
-				best, ok := r.bookMove(game.Position(), len(movesUCI), assignment)
-				var err error
-				if !ok {
-					best, err = eng.BestMoveMovetime(ctx, movesUCI, assignment.MovetimeMS)
-					if err != nil {
-						r.failGame(ctx, "*", fmt.Sprintf("bestmove error: %v", err))
-						return
-					}
-				} else {
-					bookPlies++
+				best, err := eng.BestMoveMovetime(ctx, movesUCI, assignment.MovetimeMS)
+				if err != nil {
+					r.failGame(ctx, "*", fmt.Sprintf("bestmove error: %v", err))
+					return
 				}
 				if best == "(none)" || best == "0000" {
 					r.failGame(ctx, "*", "engine returned no move")

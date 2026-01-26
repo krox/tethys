@@ -28,7 +28,6 @@ type Config struct {
 	Engines      []EngineConfig `json:"engines"`
 	EnabledPairs []PairConfig   `json:"enabled_pairs"`
 	MovetimeMS   int            `json:"movetime_ms"`
-	MaxPlies     int            `json:"max_plies"`
 	OpeningMin   int            `json:"opening_min_count"`
 	BookEnabled  bool           `json:"book_enabled"`
 	BookPath     string         `json:"book_path"`
@@ -95,9 +94,6 @@ func (s *Store) loadOrInit(baseDir string) error {
 	if s.cfg.MovetimeMS <= 0 {
 		s.cfg.MovetimeMS = 100
 	}
-	if s.cfg.MaxPlies <= 0 {
-		s.cfg.MaxPlies = 200
-	}
 	if s.cfg.OpeningMin <= 0 {
 		s.cfg.OpeningMin = 20
 	}
@@ -145,7 +141,6 @@ func (s *Store) saveLocked() error {
 func defaultConfig(baseDir string) Config {
 	return Config{
 		MovetimeMS:   100,
-		MaxPlies:     200,
 		OpeningMin:   20,
 		BookEnabled:  false,
 		BookPath:     filepath.Join(baseDir, "book.bin"),
