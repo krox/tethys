@@ -44,6 +44,11 @@ a:hover {
     letter-spacing: 0.5px;
 }
 
+.top-meta {
+    color: var(--muted);
+    font-size: 13px;
+}
+
 .shell {
     display: flex;
     align-items: flex-start;

@@ -1031,3 +1031,25 @@ func (s *Store) AllFinishedMovesLines(ctx context.Context) (string, error) {
 	}
 	return out, rows.Err()
 }
+
+func (s *Store) CountGames(ctx context.Context) (int, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM games`)
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (s *Store) CountEngines(ctx context.Context) (int, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM players
+		WHERE engine_path IS NOT NULL AND engine_path != ''
+	`)
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}

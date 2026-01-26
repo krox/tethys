@@ -6,9 +6,28 @@ import (
 )
 
 func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	gameCount, err := h.store.CountGames(ctx)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	engineCount, err := h.store.CountEngines(ctx)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	recentGames, err := h.store.ListFinishedGames(ctx, 10)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	_ = h.tpl.ExecuteTemplate(w, "live_view.html", map[string]any{
-		"IsAdmin": h.isAdminRequest(w, r),
-		"Page":    "live",
+		"IsAdmin":     h.isAdminRequest(w, r),
+		"Page":        "live",
+		"GameCount":   gameCount,
+		"EngineCount": engineCount,
+		"RecentGames": recentGames,
 	})
 }
 

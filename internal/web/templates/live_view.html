@@ -11,6 +11,7 @@
 <body>
     <header class="top">
         <div class="brand">tethys</div>
+        <div class="top-meta">{{.GameCount}} games, {{.EngineCount}} engines</div>
     </header>
 
     <div class="shell">
@@ -35,6 +36,40 @@
         <main class="container">
             <h1>Live View</h1>
             <div id="live" class="card" data-url="/live/fragment">Loading…</div>
+
+            <div class="card" style="margin-top: 16px;">
+                <h2>Recent games</h2>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Played</th>
+                            <th>White</th>
+                            <th>Black</th>
+                            <th>Result</th>
+                            <th>Termination</th>
+                            <th>Length (plies)</th>
+                            <th>Movetime</th>
+                            <th>View</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .RecentGames}}
+                        <tr>
+                            <td>{{.ID}}</td>
+                            <td class="mono">{{.PlayedAt}}</td>
+                            <td>{{.White}}</td>
+                            <td>{{.Black}}</td>
+                            <td>{{.Result}}</td>
+                            <td>{{.Termination}}</td>
+                            <td>{{.Plies}}</td>
+                            <td>{{.MovetimeMS}} ms</td>
+                            <td><a href="/games/view?id={{.ID}}">open</a></td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
         </main>
     </div>
 
