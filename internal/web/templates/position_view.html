@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tethys - position</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+    <header class="top">
+        <div class="brand">tethys</div>
+    </header>
+
+    <div class="shell">
+        <aside class="sidebar">
+            <nav class="side-nav">
+                <a href="/" {{if eq .Page "live" }}class="active" {{end}}>Live View</a>
+                <a href="/opening" {{if eq .Page "opening" }}class="active" {{end}}>Opening Explorer</a>
+                <a href="/book" {{if eq .Page "book" }}class="active" {{end}}>Book Explorer</a>
+                <a href="/results" {{if eq .Page "ranking" }}class="active" {{end}}>Ranking</a>
+                <a href="/games" {{if eq .Page "games" }}class="active" {{end}}>Game Database</a>
+                <a href="/positions/view" {{if eq .Page "positions" }}class="active" {{end}}>Position Analysis</a>
+                <a href="/admin/settings" {{if eq .Page "settings" }}class="active" {{end}}>Global Settings</a>
+                <a href="/admin/matches" {{if eq .Page "matches" }}class="active" {{end}}>Match Settings</a>
+                <a href="/admin/engines" {{if eq .Page "engines" }}class="active" {{end}}>Engine Settings</a>
+                {{if .IsAdmin}}
+                <form method="post" action="/admin/logout">
+                    <button type="submit" class="linkish">Logout</button>
+                </form>
+                {{end}}
+            </nav>
+        </aside>
+
+        <main class="container">
+            <h1>Position Analysis</h1>
+            <div class="card">
+                <div class="row" style="margin-bottom: 12px; gap: 8px;">
+                    <span class="hint">Drag a piece to make a move.</span>
+                    <button type="button" id="undo_move">Undo</button>
+                    <a class="linkish" href="/positions/view">Reset</a>
+                </div>
+                <div class="board-wrap">
+                    <div class="board">
+                        {{range .Board}}
+                        <div class="rank">
+                            {{range .}}
+                            <div class="{{.Class}}" data-square="{{.Square}}" data-piece="{{.Piece}}"
+                                draggable="{{if .Piece}}true{{else}}false{{end}}">{{.Glyph}}</div>
+                            {{end}}
+                        </div>
+                        {{end}}
+                    </div>
+                </div>
+                <div class="eval-panel">
+                    <div class="meta">Zobrist: <span id="zobrist">{{.ZobristKey}}</span></div>
+                    <div class="meta">FEN: <span id="fen">{{.FEN}}</span></div>
+                    <div class="meta">Engine: <span id="engine">{{.EngineName}}</span></div>
+                    <div class="meta">Depth: <span id="depth">{{.Eval.Depth}}</span></div>
+                    <div class="meta">Score: <span id="score">{{.Eval.Score}}</span></div>
+                    <div class="meta">PV: <span id="pv">{{.Eval.PV}}</span></div>
+                    <div class="meta error" id="eval-error">{{.Eval.Err}}</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        (function () {
+            const zobrist = document.getElementById('zobrist').textContent.trim();
+            const fenEl = document.getElementById('fen');
+            const depthEl = document.getElementById('depth');
+            const scoreEl = document.getElementById('score');
+            const pvEl = document.getElementById('pv');
+            const errEl = document.getElementById('eval-error');
+            const undoBtn = document.getElementById('undo_move');
+            const squares = Array.from(document.querySelectorAll('.board .sq'));
+
+            async function refresh() {
+                if (!zobrist) return;
+                try {
+                    const res = await fetch(`/api/positions/eval?zobrist=${encodeURIComponent(zobrist)}`);
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (data.depth !== undefined) depthEl.textContent = data.depth || '';
+                    if (data.score !== undefined) scoreEl.textContent = data.score || '';
+                    if (data.pv !== undefined) pvEl.textContent = data.pv || '';
+                    if (data.error !== undefined) errEl.textContent = data.error || '';
+                } catch (e) {
+                    // ignore polling errors
+                }
+            }
+
+            refresh();
+            setInterval(refresh, 1000);
+
+            function applyMove(from, to, piece) {
+                const fen = fenEl.textContent.trim();
+                if (!from || !to || !fen) return;
+                let uci = `${from}${to}`;
+                const targetRank = to[1];
+                if ((piece === 'P' && targetRank === '8') || (piece === 'p' && targetRank === '1')) {
+                    uci += 'q';
+                }
+                fetch(`/api/positions/move?fen=${encodeURIComponent(fen)}&uci=${encodeURIComponent(uci)}`)
+                    .then((res) => res.ok ? res.json() : null)
+                    .then((data) => {
+                        if (data && data.fen) {
+                            window.location = `/positions/view?fen=${encodeURIComponent(data.fen)}`;
+                        }
+                    })
+                    .catch(() => {
+                        if (errEl) errEl.textContent = 'Unable to apply move.';
+                    });
+            }
+
+            squares.forEach((sq) => {
+                sq.addEventListener('dragstart', (evt) => {
+                    const from = sq.dataset.square || '';
+                    const piece = sq.dataset.piece || '';
+                    if (!from || !piece) {
+                        evt.preventDefault();
+                        return;
+                    }
+                    evt.dataTransfer.setData('text/plain', from);
+                    evt.dataTransfer.setData('text/piece', piece);
+                });
+                sq.addEventListener('dragover', (evt) => evt.preventDefault());
+                sq.addEventListener('drop', (evt) => {
+                    evt.preventDefault();
+                    const from = evt.dataTransfer.getData('text/plain');
+                    const piece = evt.dataTransfer.getData('text/piece');
+                    const to = sq.dataset.square || '';
+                    if (!from || !to || from === to) return;
+                    applyMove(from, to, piece);
+                });
+            });
+
+            if (undoBtn) {
+                undoBtn.addEventListener('click', () => window.history.back());
+            }
+        })();
+    </script>
+</body>
+
+</html>
