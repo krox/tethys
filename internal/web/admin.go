@@ -63,8 +63,14 @@ func (h *Handler) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	engines, err := h.store.ListEngines(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	_ = h.tpl.ExecuteTemplate(w, "global_settings.html", map[string]any{
 		"Cfg":     cfg,
+		"Engines": engines,
 		"IsAdmin": true,
 		"Page":    "settings",
 	})
@@ -85,8 +91,15 @@ func (h *Handler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request
 	if openingMin <= 0 {
 		openingMin = 20
 	}
+	analysisDepth, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("analysis_depth")))
+	if analysisDepth <= 0 {
+		analysisDepth = 12
+	}
+	analysisEngineID, _ := strconv.ParseInt(strings.TrimSpace(r.Form.Get("analysis_engine_id")), 10, 64)
 
 	cfg.OpeningMin = openingMin
+	cfg.AnalysisDepth = analysisDepth
+	cfg.AnalysisEngineID = analysisEngineID
 
 	if err := h.conf.UpdateConfig(r.Context(), cfg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

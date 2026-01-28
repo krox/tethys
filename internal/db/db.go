@@ -51,10 +51,19 @@ var schema_stmts = []string{
 		CHECK (result IS NULL OR result IN ('1-0', '0-1', '1/2-1/2'))
 		CHECK (trim(moves_uci) = moves_uci)
 	);`,
+	`CREATE TABLE IF NOT EXISTS evals (
+		zobrist_key INTEGER PRIMARY KEY,
+		fen TEXT NOT NULL,
+		score TEXT NOT NULL DEFAULT '',
+		pv TEXT NOT NULL DEFAULT '',
+		engine_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+		depth INTEGER NOT NULL DEFAULT 0
+	);`,
 	`CREATE INDEX IF NOT EXISTS idx_games_played_at ON games(played_at);`,
 	`CREATE INDEX IF NOT EXISTS idx_games_white_player_id ON games(white_player_id);`,
 	`CREATE INDEX IF NOT EXISTS idx_games_black_player_id ON games(black_player_id);`,
 	`CREATE INDEX IF NOT EXISTS idx_games_matchup ON games(white_player_id, black_player_id, ruleset_id);`,
+	`CREATE INDEX IF NOT EXISTS idx_evals_engine_id ON evals(engine_id);`,
 	`CREATE INDEX IF NOT EXISTS idx_matchups_player_a_id ON matchups(player_a_id);`,
 	`CREATE INDEX IF NOT EXISTS idx_matchups_player_b_id ON matchups(player_b_id);`,
 	`CREATE INDEX IF NOT EXISTS idx_matchups_ruleset_id ON matchups(ruleset_id);`,
@@ -133,6 +142,15 @@ type GameDetail struct {
 	MovesUCI    string
 	Plies       int
 	BookPlies   int
+}
+
+type Eval struct {
+	ZobristKey uint64
+	FEN        string
+	Score      string
+	PV         string
+	EngineID   int64
+	Depth      int
 }
 
 type Engine struct {
@@ -519,6 +537,33 @@ func (s *Store) EngineIDByName(ctx context.Context, name string) (int64, error) 
 		return 0, err
 	}
 	return id, nil
+}
+
+func (s *Store) EvalByZobrist(ctx context.Context, key uint64) (Eval, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT zobrist_key, fen, score, pv, engine_id, depth
+		FROM evals
+		WHERE zobrist_key = ?
+	`, key)
+	var e Eval
+	if err := row.Scan(&e.ZobristKey, &e.FEN, &e.Score, &e.PV, &e.EngineID, &e.Depth); err != nil {
+		return Eval{}, err
+	}
+	return e, nil
+}
+
+func (s *Store) UpsertEval(ctx context.Context, e Eval) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO evals (zobrist_key, fen, score, pv, engine_id, depth)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(zobrist_key) DO UPDATE SET
+			fen = excluded.fen,
+			score = excluded.score,
+			pv = excluded.pv,
+			engine_id = excluded.engine_id,
+			depth = excluded.depth
+	`, e.ZobristKey, e.FEN, e.Score, e.PV, e.EngineID, e.Depth)
+	return err
 }
 
 func (s *Store) InsertRuleset(ctx context.Context, movetimeMS int, bookPath string, bookMaxPlies int) (int64, error) {

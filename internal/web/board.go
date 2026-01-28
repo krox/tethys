@@ -1,10 +1,17 @@
 package web
 
-import "github.com/notnil/chess"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/notnil/chess"
+)
 
 type SquareView struct {
-	Glyph string
-	Class string
+	Glyph  string
+	Class  string
+	Square string
+	Piece  string
 }
 
 func boardFromPosition(pos *chess.Position) [][]SquareView {
@@ -17,6 +24,8 @@ func boardFromPosition(pos *chess.Position) [][]SquareView {
 			sq := chess.NewSquare(f, r)
 			p := b.Piece(sq)
 			glyph := pieceGlyph(p)
+			piece := pieceCode(p)
+			square := fmt.Sprintf("%c%d", 'a'+byte(f), int(r)+1)
 
 			// a1 is dark.
 			fileIdx := int(f)
@@ -29,7 +38,7 @@ func boardFromPosition(pos *chess.Position) [][]SquareView {
 				class += "dark"
 			}
 
-			row = append(row, SquareView{Glyph: glyph, Class: class})
+			row = append(row, SquareView{Glyph: glyph, Class: class, Square: square, Piece: piece})
 		}
 		board = append(board, row)
 	}
@@ -76,4 +85,31 @@ func pieceGlyph(p chess.Piece) string {
 	default:
 		return ""
 	}
+}
+
+func pieceCode(p chess.Piece) string {
+	if p == chess.NoPiece {
+		return ""
+	}
+	letter := ""
+	switch p.Type() {
+	case chess.King:
+		letter = "k"
+	case chess.Queen:
+		letter = "q"
+	case chess.Rook:
+		letter = "r"
+	case chess.Bishop:
+		letter = "b"
+	case chess.Knight:
+		letter = "n"
+	case chess.Pawn:
+		letter = "p"
+	default:
+		return ""
+	}
+	if p.Color() == chess.White {
+		return strings.ToUpper(letter)
+	}
+	return letter
 }

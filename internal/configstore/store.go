@@ -25,10 +25,12 @@ type PairConfig struct {
 }
 
 type Config struct {
-	Engines      []EngineConfig `json:"engines"`
-	EnabledPairs []PairConfig   `json:"enabled_pairs"`
-	OpeningMin   int            `json:"opening_min_count"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	Engines          []EngineConfig `json:"engines"`
+	EnabledPairs     []PairConfig   `json:"enabled_pairs"`
+	OpeningMin       int            `json:"opening_min_count"`
+	AnalysisEngineID int64          `json:"analysis_engine_id"`
+	AnalysisDepth    int            `json:"analysis_depth"`
+	UpdatedAt        time.Time      `json:"updated_at"`
 }
 
 type Store struct {
@@ -90,6 +92,9 @@ func (s *Store) loadOrInit(baseDir string) error {
 	if s.cfg.OpeningMin <= 0 {
 		s.cfg.OpeningMin = 20
 	}
+	if s.cfg.AnalysisDepth <= 0 {
+		s.cfg.AnalysisDepth = 12
+	}
 	if len(s.cfg.Engines) == 0 {
 		var legacy struct {
 			EngineA EngineConfig `json:"engine_a"`
@@ -127,7 +132,8 @@ func (s *Store) saveLocked() error {
 
 func defaultConfig(baseDir string) Config {
 	return Config{
-		OpeningMin: 20,
-		UpdatedAt:  time.Now().UTC(),
+		OpeningMin:    20,
+		AnalysisDepth: 12,
+		UpdatedAt:     time.Now().UTC(),
 	}
 }

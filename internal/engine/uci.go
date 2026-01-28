@@ -84,6 +84,13 @@ func (e *UCIEngine) Send(line string) error {
 	return err
 }
 
+func (e *UCIEngine) ReadLine() (string, error) {
+	if e.out == nil {
+		return "", fmt.Errorf("engine not started")
+	}
+	return e.out.ReadString('\n')
+}
+
 func (e *UCIEngine) ReadUntilPrefix(ctx context.Context, prefix string, timeout time.Duration) (string, error) {
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()

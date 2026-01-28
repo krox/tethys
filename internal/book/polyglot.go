@@ -44,6 +44,10 @@ func Load(path string) (*Book, error) {
 	return &Book{entries: entries}, nil
 }
 
+func ZobristKey(pos *chess.Position) uint64 {
+	return polyglotKey(pos)
+}
+
 func (b *Book) Lookup(pos *chess.Position) (string, bool) {
 	if b == nil || len(b.entries) == 0 {
 		return "", false

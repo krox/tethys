@@ -22,6 +22,7 @@ type Handler struct {
 	conf  *configstore.Store
 	r     *engine.Runner
 	b     *engine.Broadcaster
+	an    *engine.Analyzer
 
 	adminToken string
 	uploadDir  string
@@ -30,13 +31,14 @@ type Handler struct {
 	tpl *template.Template
 }
 
-func NewHandler(store *db.Store, conf *configstore.Store, r *engine.Runner, b *engine.Broadcaster, adminToken string, uploadDir string, booksDir string) *Handler {
+func NewHandler(store *db.Store, conf *configstore.Store, r *engine.Runner, b *engine.Broadcaster, an *engine.Analyzer, adminToken string, uploadDir string, booksDir string) *Handler {
 	tpl := template.Must(template.New("base").ParseFS(templatesFS, "templates/*.html"))
 	return &Handler{
 		store:      store,
 		conf:       conf,
 		r:          r,
 		b:          b,
+		an:         an,
 		adminToken: adminToken,
 		uploadDir:  uploadDir,
 		booksDir:   booksDir,
@@ -59,6 +61,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /opening/fragment", h.handleOpeningFragment)
 	mux.HandleFunc("GET /book", h.handleBookExplorer)
 	mux.HandleFunc("GET /results", h.handleResults)
+	mux.HandleFunc("GET /positions/view", h.handlePositionView)
+	mux.HandleFunc("GET /api/positions/eval", h.handlePositionEval)
+	mux.HandleFunc("GET /api/positions/move", h.handlePositionMove)
 
 	mux.HandleFunc("GET /games", h.handleGames)
 	mux.HandleFunc("GET /games/matchup.txt", h.handleMatchupMoves)

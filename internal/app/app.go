@@ -54,8 +54,9 @@ func New(dataDir string, dbPath string, configPath string, engineUploadDir strin
 	b := engine.NewBroadcaster()
 	r := engine.NewRunner(sqlDB, configStore, b)
 	r.Start(context.Background())
+	an := engine.NewAnalyzer(sqlDB, configStore)
 
-	h := web.NewHandler(sqlDB, configStore, r, b, adminToken, engineUploadDir, booksDir)
+	h := web.NewHandler(sqlDB, configStore, r, b, an, adminToken, engineUploadDir, booksDir)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 

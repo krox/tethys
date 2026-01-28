@@ -21,6 +21,7 @@
                 <a href="/book" {{if eq .Page "book" }}class="active" {{end}}>Book Explorer</a>
                 <a href="/results" {{if eq .Page "ranking" }}class="active" {{end}}>Ranking</a>
                 <a href="/games" {{if eq .Page "games" }}class="active" {{end}}>Game Database</a>
+                <a href="/positions/view" {{if eq .Page "positions" }}class="active" {{end}}>Position Analysis</a>
                 {{if .IsAdmin}}
                 <a href="/admin/settings" {{if eq .Page "settings" }}class="active" {{end}}>Global Settings</a>
                 <a href="/admin/matches" {{if eq .Page "matches" }}class="active" {{end}}>Match Settings</a>
@@ -48,11 +49,12 @@
                     <div class="row">
                         <button type="button" id="prev_move">Previous</button>
                         <button type="button" id="next_move">Next</button>
+                        <a id="analyze_position" class="linkish" href="/positions/view">Analyze position</a>
                         <span id="move_index" class="mono"></span>
                     </div>
                     <div id="boards">
                         {{range .Positions}}
-                        <div class="board-frame" data-index="{{.Index}}">
+                        <div class="board-frame" data-index="{{.Index}}" data-fen="{{.FEN}}">
                             <div class="board">
                                 {{range .Board}}
                                 <div class="rank">
@@ -86,6 +88,7 @@
             const prevBtn = document.getElementById('prev_move');
             const nextBtn = document.getElementById('next_move');
             const idxLabel = document.getElementById('move_index');
+            const analyzeLink = document.getElementById('analyze_position');
             let idx = 0;
 
             function setActive(index) {
@@ -93,6 +96,11 @@
                 frames.forEach((f) => f.classList.toggle('active', Number(f.dataset.index) === idx));
                 moves.forEach((m) => m.classList.toggle('active', Number(m.dataset.index) === idx));
                 idxLabel.textContent = `${idx}/${frames.length - 1}`;
+                const frame = frames.find((f) => Number(f.dataset.index) === idx);
+                if (frame && analyzeLink) {
+                    const fen = frame.dataset.fen || '';
+                    analyzeLink.href = fen ? `/positions/view?fen=${encodeURIComponent(fen)}` : '/positions/view';
+                }
             }
 
             prevBtn.addEventListener('click', () => setActive(idx - 1));

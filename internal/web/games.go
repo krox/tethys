@@ -319,6 +319,7 @@ type GameMoveView struct {
 type GamePositionView struct {
 	Index int
 	Board [][]SquareView
+	FEN   string
 }
 
 type GameView struct {
@@ -337,7 +338,7 @@ type GameView struct {
 
 func buildGameView(game db.GameDetail) (GameView, error) {
 	pos := chess.StartingPosition()
-	positions := []GamePositionView{{Index: 0, Board: boardFromPosition(pos)}}
+	positions := []GamePositionView{{Index: 0, Board: boardFromPosition(pos), FEN: pos.String()}}
 	moves := make([]GameMoveView, 0)
 
 	if strings.TrimSpace(game.MovesUCI) != "" {
@@ -359,7 +360,7 @@ func buildGameView(game db.GameDetail) (GameView, error) {
 			}
 			pos = g.Position()
 			moves = append(moves, GameMoveView{Index: i + 1, UCI: uci, SAN: san})
-			positions = append(positions, GamePositionView{Index: i + 1, Board: boardFromPosition(pos)})
+			positions = append(positions, GamePositionView{Index: i + 1, Board: boardFromPosition(pos), FEN: pos.String()})
 		}
 	}
 
