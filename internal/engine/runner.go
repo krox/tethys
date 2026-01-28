@@ -128,22 +128,11 @@ func (r *Runner) loop(parent context.Context) {
 		func() {
 			defer cancel()
 
-			cfg, err := r.config.GetConfig(ctx)
-			if err != nil {
-				log.Printf("runner: config error: %v", err)
-				r.setLive(func(ls *LiveState) {
-					ls.Status = "error"
-					ls.Result = "config error"
-				})
-				time.Sleep(2 * time.Second)
-				return
-			}
-
 			counts := []db.MatchupCount{}
 			engines := []db.Engine{}
 			matchups := []db.Matchup{}
 			rulesets := make(map[int64]db.Ruleset)
-			defaultRulesetID := int64(0)
+			defaultRuleset := db.Ruleset{}
 			if r.store != nil {
 				if rows, err := r.store.ListMatchupCounts(ctx); err == nil {
 					counts = rows
@@ -160,30 +149,29 @@ func (r *Runner) loop(parent context.Context) {
 				} else {
 					log.Printf("runner: matchup list error: %v", err)
 				}
-				if id, err := r.store.EnsureDefaultRuleset(ctx, cfg.MovetimeMS, cfg.BookPath, cfg.BookMaxPlies); err == nil {
-					defaultRulesetID = id
-				} else {
-					log.Printf("runner: default ruleset error: %v", err)
-				}
 				if rows, err := r.store.ListRulesets(ctx); err == nil {
 					for _, rs := range rows {
 						rulesets[rs.ID] = rs
+						if defaultRuleset.ID == 0 || rs.ID < defaultRuleset.ID {
+							defaultRuleset = rs
+						}
 					}
 				} else {
 					log.Printf("runner: ruleset list error: %v", err)
 				}
 			}
+			if defaultRuleset.MovetimeMS == 0 {
+				defaultRuleset.MovetimeMS = 100
+			}
 
-			assignment, nextIdx := selectAssignment(cfg, engines, matchups, rulesets, counts, r.pickIdx)
+			assignment, nextIdx := selectAssignment(defaultRuleset, engines, matchups, rulesets, counts, r.pickIdx)
 			r.pickIdx = nextIdx
-			if assignment.RulesetID == 0 && defaultRulesetID != 0 {
-				assignment.RulesetID = defaultRulesetID
-				if rs, ok := rulesets[defaultRulesetID]; ok {
-					assignment.MovetimeMS = rs.MovetimeMS
-					assignment.BookPath = rs.BookPath
-					assignment.BookMaxPlies = rs.BookMaxPlies
-					assignment.BookEnabled = rs.BookPath != ""
-				}
+			if assignment.RulesetID == 0 && defaultRuleset.ID != 0 {
+				assignment.RulesetID = defaultRuleset.ID
+				assignment.MovetimeMS = defaultRuleset.MovetimeMS
+				assignment.BookPath = defaultRuleset.BookPath
+				assignment.BookMaxPlies = defaultRuleset.BookMaxPlies
+				assignment.BookEnabled = defaultRuleset.BookPath != ""
 			}
 
 			if assignment.White.Path == "" || assignment.Black.Path == "" {

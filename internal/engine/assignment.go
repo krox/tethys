@@ -3,7 +3,6 @@ package engine
 import (
 	"fmt"
 
-	"tethys/internal/configstore"
 	"tethys/internal/db"
 )
 
@@ -23,12 +22,12 @@ type ColorAssignment struct {
 	RulesetID    int64
 }
 
-func selectAssignment(cfg configstore.Config, engines []db.Engine, matchups []db.Matchup, rulesets map[int64]db.Ruleset, counts []db.MatchupCount, pickIdx int) (ColorAssignment, int) {
+func selectAssignment(defaultRuleset db.Ruleset, engines []db.Engine, matchups []db.Matchup, rulesets map[int64]db.Ruleset, counts []db.MatchupCount, pickIdx int) (ColorAssignment, int) {
 	assign := ColorAssignment{
-		MovetimeMS:   cfg.MovetimeMS,
-		BookEnabled:  cfg.BookEnabled,
-		BookPath:     cfg.BookPath,
-		BookMaxPlies: cfg.BookMaxPlies,
+		MovetimeMS:   defaultRuleset.MovetimeMS,
+		BookPath:     defaultRuleset.BookPath,
+		BookMaxPlies: defaultRuleset.BookMaxPlies,
+		BookEnabled:  defaultRuleset.BookPath != "",
 	}
 	if assign.MovetimeMS <= 0 {
 		assign.MovetimeMS = 100

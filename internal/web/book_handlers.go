@@ -27,24 +27,31 @@ type ArrowView struct {
 
 func (h *Handler) handleBookExplorer(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	cfg, err := h.conf.GetConfig(ctx)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	view := map[string]any{
 		"IsAdmin": h.isAdminRequest(w, r),
 		"Page":    "book",
 	}
 
-	if cfg.BookPath == "" {
+	rulesets, err := h.store.ListRulesets(ctx)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	bookPath := ""
+	for _, rs := range rulesets {
+		if strings.TrimSpace(rs.BookPath) != "" {
+			bookPath = rs.BookPath
+			break
+		}
+	}
+
+	if bookPath == "" {
 		view["Error"] = "No opening book configured."
 		_ = h.tpl.ExecuteTemplate(w, "book_explorer.html", view)
 		return
 	}
 
-	bk, err := book.Load(cfg.BookPath)
+	bk, err := book.Load(bookPath)
 	if err != nil {
 		view["Error"] = err.Error()
 		_ = h.tpl.ExecuteTemplate(w, "book_explorer.html", view)
@@ -95,7 +102,7 @@ func (h *Handler) handleBookExplorer(w http.ResponseWriter, r *http.Request) {
 		moveViews = append(moveViews, moveView)
 	}
 
-	view["BookPath"] = cfg.BookPath
+	view["BookPath"] = bookPath
 	view["FEN"] = fen
 	view["Moves"] = moveViews
 	view["Board"] = boardFromPosition(pos)

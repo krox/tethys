@@ -27,11 +27,7 @@ type PairConfig struct {
 type Config struct {
 	Engines      []EngineConfig `json:"engines"`
 	EnabledPairs []PairConfig   `json:"enabled_pairs"`
-	MovetimeMS   int            `json:"movetime_ms"`
 	OpeningMin   int            `json:"opening_min_count"`
-	BookEnabled  bool           `json:"book_enabled"`
-	BookPath     string         `json:"book_path"`
-	BookMaxPlies int            `json:"book_max_plies"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 }
 
@@ -91,17 +87,8 @@ func (s *Store) loadOrInit(baseDir string) error {
 		return fmt.Errorf("parse config: %w", err)
 	}
 
-	if s.cfg.MovetimeMS <= 0 {
-		s.cfg.MovetimeMS = 100
-	}
 	if s.cfg.OpeningMin <= 0 {
 		s.cfg.OpeningMin = 20
-	}
-	if s.cfg.BookMaxPlies <= 0 {
-		s.cfg.BookMaxPlies = 16
-	}
-	if s.cfg.BookPath == "" {
-		s.cfg.BookPath = filepath.Join(baseDir, "book.bin")
 	}
 	if len(s.cfg.Engines) == 0 {
 		var legacy struct {
@@ -140,11 +127,7 @@ func (s *Store) saveLocked() error {
 
 func defaultConfig(baseDir string) Config {
 	return Config{
-		MovetimeMS:   100,
-		OpeningMin:   20,
-		BookEnabled:  false,
-		BookPath:     filepath.Join(baseDir, "book.bin"),
-		BookMaxPlies: 16,
-		UpdatedAt:    time.Now().UTC(),
+		OpeningMin: 20,
+		UpdatedAt:  time.Now().UTC(),
 	}
 }

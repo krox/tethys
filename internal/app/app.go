@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"tethys/internal/configstore"
@@ -31,6 +32,10 @@ func New(dataDir string, dbPath string, configPath string, engineUploadDir strin
 	if err := os.MkdirAll(engineUploadDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create engine upload dir: %w", err)
 	}
+	booksDir := filepath.Join(dataDir, "books")
+	if err := os.MkdirAll(booksDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create books dir: %w", err)
+	}
 
 	adminToken, _, err := loadOrInitAdminToken(dataDir)
 	if err != nil {
@@ -50,7 +55,7 @@ func New(dataDir string, dbPath string, configPath string, engineUploadDir strin
 	r := engine.NewRunner(sqlDB, configStore, b)
 	r.Start(context.Background())
 
-	h := web.NewHandler(sqlDB, configStore, r, b, adminToken, engineUploadDir)
+	h := web.NewHandler(sqlDB, configStore, r, b, adminToken, engineUploadDir, booksDir)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 

@@ -60,6 +60,8 @@ var schema_stmts = []string{
 	`CREATE INDEX IF NOT EXISTS idx_matchups_ruleset_id ON matchups(ruleset_id);`,
 }
 
+const defaultRulesetMovetimeMS = 100
+
 type Store struct {
 	db *sql.DB
 }
@@ -87,6 +89,10 @@ func Open(path string) (*Store, error) {
 			return nil, fmt.Errorf("migrate: %w", err)
 		}
 	}
+	if err := ensureDefaultRulesetExists(db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("default ruleset: %w", err)
+	}
 	return &Store{db: db}, nil
 }
 
@@ -99,6 +105,21 @@ func nullableString(value string) any {
 		return nil
 	}
 	return value
+}
+
+func ensureDefaultRulesetExists(db *sql.DB) error {
+	row := db.QueryRow(`SELECT id FROM rulesets ORDER BY id ASC LIMIT 1`)
+	var id int64
+	if err := row.Scan(&id); err == nil {
+		return nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	_, err := db.Exec(`
+		INSERT INTO rulesets (movetime_ms, book_path, book_max_plies)
+		VALUES (?, NULL, 0)
+	`, defaultRulesetMovetimeMS)
+	return err
 }
 
 type GameDetail struct {
@@ -500,12 +521,7 @@ func (s *Store) EngineIDByName(ctx context.Context, name string) (int64, error) 
 	return id, nil
 }
 
-func (s *Store) EnsureDefaultRuleset(ctx context.Context, movetimeMS int, bookPath string, bookMaxPlies int) (int64, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id FROM rulesets ORDER BY id ASC LIMIT 1`)
-	var id int64
-	if err := row.Scan(&id); err == nil {
-		return id, nil
-	}
+func (s *Store) InsertRuleset(ctx context.Context, movetimeMS int, bookPath string, bookMaxPlies int) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `
 		INSERT INTO rulesets (movetime_ms, book_path, book_max_plies)
 		VALUES (?, ?, ?)
@@ -514,6 +530,11 @@ func (s *Store) EnsureDefaultRuleset(ctx context.Context, movetimeMS int, bookPa
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+
+func (s *Store) DeleteRuleset(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM rulesets WHERE id = ?`, id)
+	return err
 }
 
 func (s *Store) ListRulesets(ctx context.Context) ([]Ruleset, error) {
@@ -575,6 +596,22 @@ func (s *Store) ListMatchups(ctx context.Context) ([]Matchup, error) {
 
 func (s *Store) ReplaceMatchups(ctx context.Context, matchups []Matchup) error {
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM matchups`); err != nil {
+		return err
+	}
+	for _, m := range matchups {
+		_, err := s.db.ExecContext(ctx, `
+			INSERT OR IGNORE INTO matchups (player_a_id, player_b_id, ruleset_id)
+			VALUES (?, ?, ?)
+		`, m.PlayerAID, m.PlayerBID, m.RulesetID)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) ReplaceMatchupsForRuleset(ctx context.Context, rulesetID int64, matchups []Matchup) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM matchups WHERE ruleset_id = ?`, rulesetID); err != nil {
 		return err
 	}
 	for _, m := range matchups {
