@@ -10,10 +10,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"debug/elf"
 
 	"tethys/internal/configstore"
 	"tethys/internal/db"
@@ -832,8 +835,58 @@ func storeEngineUpload(uploadDir string, file io.Reader, filename string) (strin
 		_ = os.Remove(tmp.Name())
 		return "", "", fmt.Errorf("finalize upload: %w", err)
 	}
+	if err := validateEngineBinary(storedPath); err != nil {
+		_ = os.Remove(storedPath)
+		return "", "", err
+	}
 	_ = os.Chmod(storedPath, 0o755)
 	return storedPath, storedName, nil
+}
+
+func validateEngineBinary(path string) error {
+	f, err := elf.Open(path)
+	if err != nil {
+		return fmt.Errorf("uploaded engine is not a Linux ELF binary: %w", err)
+	}
+	defer f.Close()
+	expected := expectedELFMachine()
+	if expected == elf.EM_NONE {
+		return nil
+	}
+	if f.Machine != expected {
+		return fmt.Errorf("engine architecture mismatch: expected %s, got %s", machineName(expected), machineName(f.Machine))
+	}
+	return nil
+}
+
+func expectedELFMachine() elf.Machine {
+	switch runtime.GOARCH {
+	case "amd64":
+		return elf.EM_X86_64
+	case "386":
+		return elf.EM_386
+	case "arm64":
+		return elf.EM_AARCH64
+	case "arm":
+		return elf.EM_ARM
+	default:
+		return elf.EM_NONE
+	}
+}
+
+func machineName(m elf.Machine) string {
+	switch m {
+	case elf.EM_X86_64:
+		return "x86_64"
+	case elf.EM_386:
+		return "x86"
+	case elf.EM_AARCH64:
+		return "arm64"
+	case elf.EM_ARM:
+		return "arm"
+	default:
+		return fmt.Sprintf("machine-%d", int(m))
+	}
 }
 
 func sanitizeEngineFilename(name string) string {
