@@ -18,31 +18,28 @@ var templatesFS embed.FS
 var staticFS embed.FS
 
 type Handler struct {
-	store *db.Store
-	conf  *configstore.Store
-	r     *engine.Runner
-	b     *engine.Broadcaster
-	an    *engine.Analyzer
-
-	adminToken string
-	uploadDir  string
-	booksDir   string
+	store     *db.Store
+	conf      *configstore.Store
+	r         *engine.Runner
+	b         *engine.Broadcaster
+	an        *engine.Analyzer
+	uploadDir string
+	booksDir  string
 
 	tpl *template.Template
 }
 
-func NewHandler(store *db.Store, conf *configstore.Store, r *engine.Runner, b *engine.Broadcaster, an *engine.Analyzer, adminToken string, uploadDir string, booksDir string) *Handler {
+func NewHandler(store *db.Store, conf *configstore.Store, r *engine.Runner, b *engine.Broadcaster, an *engine.Analyzer, uploadDir string, booksDir string) *Handler {
 	tpl := template.Must(template.New("base").ParseFS(templatesFS, "templates/*.html"))
 	return &Handler{
-		store:      store,
-		conf:       conf,
-		r:          r,
-		b:          b,
-		an:         an,
-		adminToken: adminToken,
-		uploadDir:  uploadDir,
-		booksDir:   booksDir,
-		tpl:        tpl,
+		store:     store,
+		conf:      conf,
+		r:         r,
+		b:         b,
+		an:        an,
+		uploadDir: uploadDir,
+		booksDir:  booksDir,
+		tpl:       tpl,
 	}
 }
 
@@ -70,21 +67,21 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /games/result.txt", h.handleResultDownload)
 	mux.HandleFunc("GET /games/", h.handleGameMoves) // /games/{id}.txt
 	mux.HandleFunc("GET /games/view", h.handleGameView)
-	mux.HandleFunc("POST /games/delete", h.requireAdmin(h.handleMatchupDelete))
-	mux.HandleFunc("POST /games/delete-result", h.requireAdmin(h.handleResultDelete))
+	mux.HandleFunc("POST /games/delete", h.handleMatchupDelete)
+	mux.HandleFunc("POST /games/delete-result", h.handleResultDelete)
 
-	mux.HandleFunc("GET /admin", h.requireAdmin(h.handleAdminRoot))
-	mux.HandleFunc("GET /admin/settings", h.requireAdmin(h.handleAdminSettings))
-	mux.HandleFunc("POST /admin/settings", h.requireAdmin(h.handleAdminSettingsSave))
-	mux.HandleFunc("GET /admin/matches", h.requireAdmin(h.handleAdminMatches))
-	mux.HandleFunc("POST /admin/matches", h.requireAdmin(h.handleAdminMatchesSave))
-	mux.HandleFunc("POST /admin/rulesets/add", h.requireAdmin(h.handleAdminRulesetAdd))
-	mux.HandleFunc("POST /admin/rulesets/delete", h.requireAdmin(h.handleAdminRulesetDelete))
-	mux.HandleFunc("GET /admin/engines", h.requireAdmin(h.handleAdminEngines))
-	mux.HandleFunc("POST /admin/engines", h.requireAdmin(h.handleAdminEnginesSave))
-	mux.HandleFunc("POST /admin/engines/duplicate", h.requireAdmin(h.handleAdminEngineDuplicate))
-	mux.HandleFunc("POST /admin/engines/add-external", h.requireAdmin(h.handleAdminEngineAddExternal))
-	mux.HandleFunc("POST /admin/engines/upload", h.requireAdmin(h.handleAdminEngineUpload))
-	mux.HandleFunc("POST /admin/engines/prune", h.requireAdmin(h.handleAdminEnginePrune))
-	mux.HandleFunc("POST /admin/logout", h.requireAdmin(h.handleAdminLogout))
+	mux.HandleFunc("GET /admin", h.handleAdminRoot)
+	mux.HandleFunc("GET /admin/settings", h.handleAdminSettings)
+	mux.HandleFunc("POST /admin/settings", h.handleAdminSettingsSave)
+	mux.HandleFunc("GET /admin/matches", h.handleAdminMatches)
+	mux.HandleFunc("POST /admin/matches", h.handleAdminMatchesSave)
+	mux.HandleFunc("POST /admin/rulesets/add", h.handleAdminRulesetAdd)
+	mux.HandleFunc("POST /admin/rulesets/delete", h.handleAdminRulesetDelete)
+	mux.HandleFunc("GET /admin/engines", h.handleAdminEngines)
+	mux.HandleFunc("POST /admin/engines", h.handleAdminEnginesSave)
+	mux.HandleFunc("POST /admin/engines/duplicate", h.handleAdminEngineDuplicate)
+	mux.HandleFunc("POST /admin/engines/add-external", h.handleAdminEngineAddExternal)
+	mux.HandleFunc("POST /admin/engines/upload", h.handleAdminEngineUpload)
+	mux.HandleFunc("POST /admin/engines/prune", h.handleAdminEnginePrune)
+	mux.HandleFunc("POST /admin/logout", h.handleAdminLogout)
 }

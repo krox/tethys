@@ -28,8 +28,7 @@ type ArrowView struct {
 func (h *Handler) handleBookExplorer(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	view := map[string]any{
-		"IsAdmin": h.isAdminRequest(w, r),
-		"Page":    "book",
+		"Page": "book",
 	}
 
 	rulesets, err := h.store.ListRulesets(ctx)

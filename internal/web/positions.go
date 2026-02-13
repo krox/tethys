@@ -88,7 +88,6 @@ func (h *Handler) handlePositionView(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = h.tpl.ExecuteTemplate(w, "position_view.html", map[string]any{
-		"IsAdmin":    h.isAdminRequest(w, r),
 		"Page":       "positions",
 		"FEN":        fenKey,
 		"ZobristKey": key,

@@ -54,7 +54,6 @@ func (h *Handler) handleResults(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = h.tpl.ExecuteTemplate(w, "ranking.html", map[string]any{
 		"Rankings": view,
-		"IsAdmin":  h.isAdminRequest(w, r),
 		"Page":     "ranking",
 	})
 }

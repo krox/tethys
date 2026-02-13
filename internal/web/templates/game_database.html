@@ -14,24 +14,7 @@
     </header>
 
     <div class="shell">
-        <aside class="sidebar">
-            <nav class="side-nav">
-                <a href="/" {{if eq .Page "live" }}class="active" {{end}}>Live View</a>
-                <a href="/opening" {{if eq .Page "opening" }}class="active" {{end}}>Opening Explorer</a>
-                <a href="/book" {{if eq .Page "book" }}class="active" {{end}}>Book Explorer</a>
-                <a href="/results" {{if eq .Page "ranking" }}class="active" {{end}}>Ranking</a>
-                <a href="/games" {{if eq .Page "games" }}class="active" {{end}}>Game Database</a>
-                <a href="/positions/view" {{if eq .Page "positions" }}class="active" {{end}}>Position Analysis</a>
-                {{if .IsAdmin}}
-                <a href="/admin/settings" {{if eq .Page "settings" }}class="active" {{end}}>Global Settings</a>
-                <a href="/admin/matches" {{if eq .Page "matches" }}class="active" {{end}}>Match Settings</a>
-                <a href="/admin/engines" {{if eq .Page "engines" }}class="active" {{end}}>Engine Settings</a>
-                <form method="post" action="/admin/logout">
-                    <button type="submit" class="linkish">Logout</button>
-                </form>
-                {{end}}
-            </nav>
-        </aside>
+        {{template "sidebar" .}}
 
         <main class="container">
             <h1>Game Database</h1>
@@ -146,7 +129,7 @@
                             <th>Movetime</th>
                             <th>Games</th>
                             <th>Download</th>
-                            {{if .IsAdmin}}<th>Delete game records</th>{{end}}
+                            <th>Delete game records</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -169,7 +152,6 @@
                                 <a
                                     href="/games/matchup.txt?a_id={{.AID}}&b_id={{.BID}}&a={{.A | urlquery}}&b={{.B | urlquery}}&movetime={{.MovetimeMS}}">download</a>
                             </td>
-                            {{if $.IsAdmin}}
                             <td>
                                 <form method="post" action="/games/delete"
                                     onsubmit="return confirm('Delete all games for this matchup and movetime?');">
@@ -179,7 +161,6 @@
                                     <button type="submit" class="danger">delete</button>
                                 </form>
                             </td>
-                            {{end}}
                         </tr>
                         {{end}}
                     </tbody>
@@ -194,7 +175,7 @@
                             <th>Result</th>
                             <th>Games</th>
                             <th>Download</th>
-                            {{if .IsAdmin}}<th>Delete game records</th>{{end}}
+                            <th>Delete game records</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -206,7 +187,6 @@
                                 <a
                                     href="/games/result.txt?result={{.Result | urlquery}}&termination={{.Termination | urlquery}}">download</a>
                             </td>
-                            {{if $.IsAdmin}}
                             <td>
                                 <form method="post" action="/games/delete-result"
                                     onsubmit="return confirm('Delete all games with this result?');">
@@ -215,7 +195,6 @@
                                     <button type="submit" class="danger">delete</button>
                                 </form>
                             </td>
-                            {{end}}
                         </tr>
                         {{end}}
                     </tbody>

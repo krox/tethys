@@ -3,7 +3,6 @@ package web
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -24,36 +23,7 @@ import (
 )
 
 func (h *Handler) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{Name: "tethys_admin_token", Value: "", Path: "/", MaxAge: -1})
-	http.Redirect(w, r, "/", http.StatusSeeOther)
-}
-
-func (h *Handler) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if h.adminToken == "" {
-			http.Error(w, "/admin disabled (no admin token)", http.StatusForbidden)
-			return
-		}
-		if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
-			if tokensEqual(token, h.adminToken) {
-				h.setAdminCookie(w)
-				next(w, r)
-				return
-			}
-			http.Error(w, "invalid admin token", http.StatusUnauthorized)
-			return
-		}
-		cookie, err := r.Cookie("tethys_admin_token")
-		if err != nil || cookie.Value == "" {
-			http.Error(w, "missing admin token (add ?token=...) to the URL", http.StatusUnauthorized)
-			return
-		}
-		if !tokensEqual(cookie.Value, h.adminToken) {
-			http.Error(w, "invalid admin token", http.StatusUnauthorized)
-			return
-		}
-		next(w, r)
-	}
+	http.Redirect(w, r, "/admin/settings", http.StatusSeeOther)
 }
 
 func (h *Handler) handleAdminRoot(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +44,6 @@ func (h *Handler) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 	_ = h.tpl.ExecuteTemplate(w, "global_settings.html", map[string]any{
 		"Cfg":     cfg,
 		"Engines": engines,
-		"IsAdmin": true,
 		"Page":    "settings",
 	})
 }
@@ -158,7 +127,6 @@ func (h *Handler) handleAdminMatches(w http.ResponseWriter, r *http.Request) {
 		"Rulesets":  buildRulesetViews(rulesets),
 		"Books":     bookOptions,
 		"RulesetID": selectedRulesetID,
-		"IsAdmin":   true,
 		"Page":      "matches",
 	})
 }
@@ -275,7 +243,6 @@ func (h *Handler) handleAdminEngines(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := buildAdminView(cfg, engines, matchups, nil, gameCounts, matchupCounts)
-	view.IsAdmin = true
 	view.Page = "engines"
 	_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 }
@@ -318,7 +285,6 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 			view.Engines[i].Games = gameCounts[id]
 			view.Engines[i].Matchups = matchupCounts[id]
 		}
-		view.IsAdmin = true
 		view.Page = "engines"
 		_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 		return
@@ -326,7 +292,6 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 
 	if errMap := testEngines(r.Context(), parsed); len(errMap) > 0 {
 		view.Engines = buildEngineViewsFromList(parsed, errMap, gameCounts, matchupCounts)
-		view.IsAdmin = true
 		view.Page = "engines"
 		_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 		return
@@ -376,7 +341,6 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		view = buildAdminView(cfg, fresh, matchups, errByID, gameCounts, matchupCounts)
-		view.IsAdmin = true
 		view.Page = "engines"
 		_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 		return
@@ -508,41 +472,6 @@ func (h *Handler) handleAdminEngineUpload(w http.ResponseWriter, r *http.Request
 	http.Redirect(w, r, "/admin/engines", http.StatusSeeOther)
 }
 
-func (h *Handler) isAdminRequest(w http.ResponseWriter, r *http.Request) bool {
-	if h.adminToken == "" {
-		return false
-	}
-	if token := strings.TrimSpace(r.URL.Query().Get("token")); token != "" {
-		if tokensEqual(token, h.adminToken) {
-			h.setAdminCookie(w)
-			return true
-		}
-		return false
-	}
-	cookie, err := r.Cookie("tethys_admin_token")
-	if err != nil || cookie.Value == "" {
-		return false
-	}
-	return tokensEqual(cookie.Value, h.adminToken)
-}
-
-func (h *Handler) setAdminCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     "tethys_admin_token",
-		Value:    h.adminToken,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
-func tokensEqual(a, b string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
-}
-
 type EngineView struct {
 	ID         int64
 	Index      int
@@ -572,7 +501,6 @@ type AdminView struct {
 	Cfg     configstore.Config
 	Engines []EngineView
 	Pairs   []PairView
-	IsAdmin bool
 	Page    string
 }
 

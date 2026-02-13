@@ -20,8 +20,6 @@ type App struct {
 	runner *engine.Runner
 	mux    *http.ServeMux
 
-	adminToken string
-
 	closeOnce sync.Once
 }
 
@@ -35,11 +33,6 @@ func New(dataDir string, dbPath string, configPath string, engineUploadDir strin
 	booksDir := filepath.Join(dataDir, "books")
 	if err := os.MkdirAll(booksDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create books dir: %w", err)
-	}
-
-	adminToken, _, err := loadOrInitAdminToken(dataDir)
-	if err != nil {
-		return nil, err
 	}
 
 	sqlDB, err := db.Open(dbPath)
@@ -56,24 +49,19 @@ func New(dataDir string, dbPath string, configPath string, engineUploadDir strin
 	r.Start(context.Background())
 	an := engine.NewAnalyzer(sqlDB, configStore)
 
-	h := web.NewHandler(sqlDB, configStore, r, b, an, adminToken, engineUploadDir, booksDir)
+	h := web.NewHandler(sqlDB, configStore, r, b, an, engineUploadDir, booksDir)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
 	return &App{
 		//db:         sqlDB,
-		runner:     r,
-		mux:        mux,
-		adminToken: adminToken,
+		runner: r,
+		mux:    mux,
 	}, nil
 }
 
 func (a *App) Router() http.Handler {
 	return a.mux
-}
-
-func (a *App) AdminToken() string {
-	return a.adminToken
 }
 
 func (a *App) Close() {

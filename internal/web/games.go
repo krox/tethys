@@ -125,7 +125,6 @@ func (h *Handler) handleGames(w http.ResponseWriter, r *http.Request) {
 		"Rows":       rows,
 		"ResultRows": buildResultRows(resultSummaries),
 		"Search":     searchView,
-		"IsAdmin":    h.isAdminRequest(w, r),
 		"Page":       "games",
 	})
 }
@@ -305,7 +304,6 @@ func (h *Handler) handleGameView(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	view.IsAdmin = h.isAdminRequest(w, r)
 	view.Page = "games"
 	_ = h.tpl.ExecuteTemplate(w, "game_viewer.html", view)
 }
@@ -332,7 +330,6 @@ type GameView struct {
 	Termination string
 	Moves       []GameMoveView
 	Positions   []GamePositionView
-	IsAdmin     bool
 	Page        string
 }
 

@@ -89,15 +89,6 @@ a:hover {
     margin-top: 8px;
 }
 
-.nav a {
-    margin-left: 14px;
-    color: var(--muted);
-}
-
-.nav a:hover {
-    color: var(--text);
-}
-
 .container {
     max-width: 980px;
     margin: 0 auto;
