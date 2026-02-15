@@ -18,9 +18,8 @@ func main() {
 	dataDir := getenv("TETHYS_DATA_DIR", "./data")
 	dbPath := filepath.Join(dataDir, "tethys.sqlite")
 	configPath := filepath.Join(dataDir, "config.json")
-	engineUploadDir := filepath.Join(dataDir, "engine_bins")
 
-	application, err := app.New(dataDir, dbPath, configPath, engineUploadDir)
+	application, err := app.New(dataDir, dbPath, configPath)
 	if err != nil {
 		log.Fatal(err)
 	}

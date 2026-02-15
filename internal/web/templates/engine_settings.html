@@ -21,18 +21,18 @@
 
             <div class="card">
                 <div class="engine-actions-bar">
-                    <form method="post" action="/admin/engines/upload" enctype="multipart/form-data"
-                        class="engine-upload-form form">
-                        <input type="file" name="engine_upload" id="engine_upload_input" class="hidden" />
-                        <button type="button" id="upload_engine_btn">Upload engine</button>
-                    </form>
                     <button type="button" id="add_external_btn">Add external</button>
                 </div>
                 <dialog id="external_engine_dialog" class="engine-dialog">
                     <form method="post" action="/admin/engines/add-external" class="form">
                         <h3>Add external engine</h3>
-                        <label>Engine path</label>
-                        <input name="engine_path" placeholder="/usr/games/stockfish" required />
+                        <label>Engine binary (data/engines)</label>
+                        <select name="engine_binary" required>
+                            <option value="">Select binary</option>
+                            {{range .EngineBinaries}}
+                            <option value="{{.}}">{{.}}</option>
+                            {{end}}
+                        </select>
                         <label>Display name (optional)</label>
                         <input name="engine_name" placeholder="stockfish" />
                         <div class="row">
@@ -47,10 +47,7 @@
                         {{range .Engines}}
                         <div class="engine-card" data-index="{{.Index}}">
                             <input type="hidden" name="engine_id_{{.Index}}" value="{{.ID}}" />
-                            <input type="hidden" name="engine_source_{{.Index}}" data-field="source"
-                                value="{{.Source}}" />
-                            <input type="hidden" name="engine_path_{{.Index}}" data-field="path"
-                                value="{{if eq .Source " upload"}}{{.StoredPath}}{{else}}{{.Path}}{{end}}" />
+                            <input type="hidden" name="engine_path_{{.Index}}" data-field="path" value="{{.Path}}" />
                             <div class="engine-top">
                                 <div class="engine-row">
                                     <span>#{{.ID}}</span>
@@ -90,8 +87,7 @@
                             <div class="engine-meta">
                                 <span class="hint">{{.Games}} games</span>
                                 <span class="hint">{{.Matchups}}matchups</span>
-                                <span class="hint">{{if eq .Source "upload"}}Uploaded:
-                                    {{.UploadName}}{{else}}Path:{{.Path}}{{end}}</span>
+                                <span class="hint">Path:{{.Path}}</span>
                                 {{if .Error}}<span class="error">{{.Error}}</span>{{end}}
                             </div>
 
@@ -139,16 +135,6 @@
                     if (del.disabled) return;
                     card.remove();
                     syncIndices();
-                });
-            }
-
-            const uploadInput = document.getElementById('engine_upload_input');
-            const uploadBtn = document.getElementById('upload_engine_btn');
-            if (uploadBtn && uploadInput) {
-                uploadBtn.addEventListener('click', () => uploadInput.click());
-                uploadInput.addEventListener('change', () => {
-                    if (!uploadInput.files || uploadInput.files.length === 0) return;
-                    uploadInput.closest('form')?.submit();
                 });
             }
 

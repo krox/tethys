@@ -18,28 +18,28 @@ var templatesFS embed.FS
 var staticFS embed.FS
 
 type Handler struct {
-	store     *db.Store
-	conf      *configstore.Store
-	r         *engine.Runner
-	b         *engine.Broadcaster
-	an        *engine.Analyzer
-	uploadDir string
-	booksDir  string
+	store      *db.Store
+	conf       *configstore.Store
+	r          *engine.Runner
+	b          *engine.Broadcaster
+	an         *engine.Analyzer
+	enginesDir string
+	booksDir   string
 
 	tpl *template.Template
 }
 
-func NewHandler(store *db.Store, conf *configstore.Store, r *engine.Runner, b *engine.Broadcaster, an *engine.Analyzer, uploadDir string, booksDir string) *Handler {
+func NewHandler(store *db.Store, conf *configstore.Store, r *engine.Runner, b *engine.Broadcaster, an *engine.Analyzer, enginesDir string, booksDir string) *Handler {
 	tpl := template.Must(template.New("base").ParseFS(templatesFS, "templates/*.html"))
 	return &Handler{
-		store:     store,
-		conf:      conf,
-		r:         r,
-		b:         b,
-		an:        an,
-		uploadDir: uploadDir,
-		booksDir:  booksDir,
-		tpl:       tpl,
+		store:      store,
+		conf:       conf,
+		r:          r,
+		b:          b,
+		an:         an,
+		enginesDir: enginesDir,
+		booksDir:   booksDir,
+		tpl:        tpl,
 	}
 }
 
@@ -81,7 +81,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/engines", h.handleAdminEnginesSave)
 	mux.HandleFunc("POST /admin/engines/duplicate", h.handleAdminEngineDuplicate)
 	mux.HandleFunc("POST /admin/engines/add-external", h.handleAdminEngineAddExternal)
-	mux.HandleFunc("POST /admin/engines/upload", h.handleAdminEngineUpload)
 	mux.HandleFunc("POST /admin/engines/prune", h.handleAdminEnginePrune)
 	mux.HandleFunc("POST /admin/logout", h.handleAdminLogout)
 }

@@ -17,7 +17,6 @@ var schema_stmts = []string{
 	`CREATE TABLE IF NOT EXISTS players (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL,
-		engine_source TEXT NOT NULL DEFAULT 'external',
 		engine_path TEXT NULL,
 		engine_args TEXT NOT NULL DEFAULT '',
 		engine_init TEXT NOT NULL DEFAULT '',
@@ -154,18 +153,12 @@ type Eval struct {
 }
 
 type Engine struct {
-	ID     int64
-	Name   string
-	Source string
-	Path   string
-	Args   string
-	Init   string
+	ID   int64
+	Name string
+	Path string
+	Args string
+	Init string
 }
-
-const (
-	EngineSourceExternal = "external"
-	EngineSourceUpload   = "upload"
-)
 
 type Matchup struct {
 	ID        int64
@@ -463,7 +456,7 @@ func (s *Store) SearchGames(ctx context.Context, filter GameSearchFilter, limit 
 
 func (s *Store) ListEngines(ctx context.Context) ([]Engine, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, engine_source, COALESCE(engine_path, ''), engine_args, engine_init
+		SELECT id, name, COALESCE(engine_path, ''), engine_args, engine_init
 		FROM players
 		WHERE engine_path IS NOT NULL AND engine_path != ''
 		ORDER BY id ASC
@@ -476,7 +469,7 @@ func (s *Store) ListEngines(ctx context.Context) ([]Engine, error) {
 	var out []Engine
 	for rows.Next() {
 		var e Engine
-		if err := rows.Scan(&e.ID, &e.Name, &e.Source, &e.Path, &e.Args, &e.Init); err != nil {
+		if err := rows.Scan(&e.ID, &e.Name, &e.Path, &e.Args, &e.Init); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
@@ -485,14 +478,10 @@ func (s *Store) ListEngines(ctx context.Context) ([]Engine, error) {
 }
 
 func (s *Store) InsertEngine(ctx context.Context, e Engine) (int64, error) {
-	source := e.Source
-	if source == "" {
-		source = EngineSourceExternal
-	}
 	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO players (name, engine_source, engine_path, engine_args, engine_init)
-		VALUES (?, ?, ?, ?, ?)
-	`, e.Name, source, nullableString(e.Path), e.Args, e.Init)
+		INSERT INTO players (name, engine_path, engine_args, engine_init)
+		VALUES (?, ?, ?, ?)
+	`, e.Name, nullableString(e.Path), e.Args, e.Init)
 	if err != nil {
 		return 0, err
 	}
@@ -500,15 +489,11 @@ func (s *Store) InsertEngine(ctx context.Context, e Engine) (int64, error) {
 }
 
 func (s *Store) UpdateEngine(ctx context.Context, e Engine) error {
-	source := e.Source
-	if source == "" {
-		source = EngineSourceExternal
-	}
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE players
-		SET name = ?, engine_source = ?, engine_path = ?, engine_args = ?, engine_init = ?
+		SET name = ?, engine_path = ?, engine_args = ?, engine_init = ?
 		WHERE id = ?
-	`, e.Name, source, nullableString(e.Path), e.Args, e.Init, e.ID)
+	`, e.Name, nullableString(e.Path), e.Args, e.Init, e.ID)
 	return err
 }
 
@@ -519,12 +504,12 @@ func (s *Store) DeleteEngine(ctx context.Context, id int64) error {
 
 func (s *Store) EngineByID(ctx context.Context, id int64) (Engine, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, name, engine_source, COALESCE(engine_path, ''), engine_args, engine_init
+		SELECT id, name, COALESCE(engine_path, ''), engine_args, engine_init
 		FROM players
 		WHERE id = ?
 	`, id)
 	var e Engine
-	if err := row.Scan(&e.ID, &e.Name, &e.Source, &e.Path, &e.Args, &e.Init); err != nil {
+	if err := row.Scan(&e.ID, &e.Name, &e.Path, &e.Args, &e.Init); err != nil {
 		return Engine{}, err
 	}
 	return e, nil

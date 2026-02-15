@@ -2,20 +2,14 @@ package web
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-
-	"debug/elf"
 
 	"tethys/internal/configstore"
 	"tethys/internal/db"
@@ -227,6 +221,11 @@ func (h *Handler) handleAdminEngines(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	engineBinaries, err := listEngineBinaries(h.enginesDir)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	gameCounts, err := h.store.EngineGameCounts(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -244,6 +243,7 @@ func (h *Handler) handleAdminEngines(w http.ResponseWriter, r *http.Request) {
 	}
 	view := buildAdminView(cfg, engines, matchups, nil, gameCounts, matchupCounts)
 	view.Page = "engines"
+	view.EngineBinaries = engineBinaries
 	_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 }
 
@@ -286,6 +286,9 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 			view.Engines[i].Matchups = matchupCounts[id]
 		}
 		view.Page = "engines"
+		if bins, err := listEngineBinaries(h.enginesDir); err == nil {
+			view.EngineBinaries = bins
+		}
 		_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 		return
 	}
@@ -293,6 +296,9 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 	if errMap := testEngines(r.Context(), parsed); len(errMap) > 0 {
 		view.Engines = buildEngineViewsFromList(parsed, errMap, gameCounts, matchupCounts)
 		view.Page = "engines"
+		if bins, err := listEngineBinaries(h.enginesDir); err == nil {
+			view.EngineBinaries = bins
+		}
 		_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 		return
 	}
@@ -342,6 +348,9 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 		}
 		view = buildAdminView(cfg, fresh, matchups, errByID, gameCounts, matchupCounts)
 		view.Page = "engines"
+		if bins, err := listEngineBinaries(h.enginesDir); err == nil {
+			view.EngineBinaries = bins
+		}
 		_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 		return
 	}
@@ -394,11 +403,10 @@ func (h *Handler) handleAdminEngineDuplicate(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	_, err = h.store.InsertEngine(r.Context(), db.Engine{
-		Name:   unique,
-		Source: original.Source,
-		Path:   original.Path,
-		Args:   original.Args,
-		Init:   original.Init,
+		Name: unique,
+		Path: original.Path,
+		Args: original.Args,
+		Init: original.Init,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -413,11 +421,28 @@ func (h *Handler) handleAdminEngineAddExternal(w http.ResponseWriter, r *http.Re
 		return
 	}
 	name := strings.TrimSpace(r.Form.Get("engine_name"))
-	path := strings.TrimSpace(r.Form.Get("engine_path"))
-	if path == "" {
-		http.Error(w, "engine path required", http.StatusBadRequest)
+	binary := strings.TrimSpace(r.Form.Get("engine_binary"))
+	if binary == "" {
+		http.Error(w, "engine binary required", http.StatusBadRequest)
 		return
 	}
+	options, err := listEngineBinaries(h.enginesDir)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	valid := false
+	for _, opt := range options {
+		if opt == binary {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		http.Error(w, "invalid engine binary", http.StatusBadRequest)
+		return
+	}
+	path := filepath.Join(h.enginesDir, binary)
 	if name == "" {
 		name = engineNameFromPath(path)
 	}
@@ -427,43 +452,8 @@ func (h *Handler) handleAdminEngineAddExternal(w http.ResponseWriter, r *http.Re
 		return
 	}
 	_, err = h.store.InsertEngine(r.Context(), db.Engine{
-		Name:   unique,
-		Source: db.EngineSourceExternal,
-		Path:   path,
-	})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, "/admin/engines", http.StatusSeeOther)
-}
-
-func (h *Handler) handleAdminEngineUpload(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(maxEngineUploadSize); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	file, header, err := r.FormFile("engine_upload")
-	if err != nil {
-		http.Error(w, "missing upload", http.StatusBadRequest)
-		return
-	}
-	defer file.Close()
-	storedPath, _, err := storeEngineUpload(h.uploadDir, file, header.Filename)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	name := engineNameFromPath(header.Filename)
-	unique, err := h.uniqueEngineName(r.Context(), name)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	_, err = h.store.InsertEngine(r.Context(), db.Engine{
-		Name:   unique,
-		Source: db.EngineSourceUpload,
-		Path:   storedPath,
+		Name: unique,
+		Path: path,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -473,18 +463,15 @@ func (h *Handler) handleAdminEngineUpload(w http.ResponseWriter, r *http.Request
 }
 
 type EngineView struct {
-	ID         int64
-	Index      int
-	Name       string
-	Source     string
-	Path       string
-	Args       string
-	Init       string
-	UploadName string
-	StoredPath string
-	Error      string
-	Games      int
-	Matchups   int
+	ID       int64
+	Index    int
+	Name     string
+	Path     string
+	Args     string
+	Init     string
+	Error    string
+	Games    int
+	Matchups int
 }
 
 type PairView struct {
@@ -498,39 +485,25 @@ type PairView struct {
 }
 
 type AdminView struct {
-	Cfg     configstore.Config
-	Engines []EngineView
-	Pairs   []PairView
-	Page    string
+	Cfg            configstore.Config
+	Engines        []EngineView
+	Pairs          []PairView
+	EngineBinaries []string
+	Page           string
 }
 
 func buildAdminView(cfg configstore.Config, engines []db.Engine, matchups []db.Matchup, errByID map[int64]string, gameCounts map[int64]int, matchupCounts map[int64]int) AdminView {
 	views := make([]EngineView, 0, len(engines))
 	for i, e := range engines {
-		source := e.Source
-		if source == "" {
-			source = db.EngineSourceExternal
-		}
-		path := e.Path
-		uploadName := ""
-		storedPath := ""
-		if source == db.EngineSourceUpload {
-			uploadName = filepath.Base(e.Path)
-			storedPath = e.Path
-			path = ""
-		}
 		view := EngineView{
-			ID:         e.ID,
-			Index:      i,
-			Name:       e.Name,
-			Source:     source,
-			Path:       path,
-			Args:       e.Args,
-			Init:       e.Init,
-			UploadName: uploadName,
-			StoredPath: storedPath,
-			Games:      gameCounts[e.ID],
-			Matchups:   matchupCounts[e.ID],
+			ID:       e.ID,
+			Index:    i,
+			Name:     e.Name,
+			Path:     e.Path,
+			Args:     e.Args,
+			Init:     e.Init,
+			Games:    gameCounts[e.ID],
+			Matchups: matchupCounts[e.ID],
 		}
 		if errByID != nil {
 			view.Error = errByID[e.ID]
@@ -589,8 +562,6 @@ func buildAdminView(cfg configstore.Config, engines []db.Engine, matchups []db.M
 	return AdminView{Cfg: cfg, Engines: views, Pairs: pairs}
 }
 
-const maxEngineUploadSize = 200 << 20
-
 func parseEnginesFromForm(r *http.Request, existing map[int64]db.Engine) ([]db.Engine, AdminView, bool) {
 	count, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("engine_count")))
 	if count < 0 {
@@ -609,15 +580,8 @@ func parseEnginesFromForm(r *http.Request, existing map[int64]db.Engine) ([]db.E
 		path := strings.TrimSpace(r.Form.Get(fmt.Sprintf("engine_path_%d", i)))
 		args := strings.TrimSpace(r.Form.Get(fmt.Sprintf("engine_args_%d", i)))
 		init := r.Form.Get(fmt.Sprintf("engine_init_%d", i))
-		source := normalizeEngineSource(r.Form.Get(fmt.Sprintf("engine_source_%d", i)))
 		if name == "" && path == "" && args == "" && strings.TrimSpace(init) == "" {
 			continue
-		}
-
-		if source == db.EngineSourceUpload && path == "" {
-			if existingEngine, ok := existing[id]; ok && existingEngine.Source == db.EngineSourceUpload && existingEngine.Path != "" {
-				path = existingEngine.Path
-			}
 		}
 
 		if name == "" {
@@ -625,13 +589,7 @@ func parseEnginesFromForm(r *http.Request, existing map[int64]db.Engine) ([]db.E
 				errMap[len(engines)] = "name required"
 			}
 		}
-		if source == db.EngineSourceUpload {
-			if path == "" {
-				if _, ok := errMap[len(engines)]; !ok {
-					errMap[len(engines)] = "upload required"
-				}
-			}
-		} else if path == "" {
+		if path == "" {
 			if _, ok := errMap[len(engines)]; !ok {
 				errMap[len(engines)] = "path required"
 			}
@@ -644,33 +602,19 @@ func parseEnginesFromForm(r *http.Request, existing map[int64]db.Engine) ([]db.E
 		}
 
 		engines = append(engines, db.Engine{
-			ID:     id,
-			Name:   name,
-			Source: source,
-			Path:   path,
-			Args:   args,
-			Init:   init,
+			ID:   id,
+			Name: name,
+			Path: path,
+			Args: args,
+			Init: init,
 		})
-		viewPath := path
-		viewUpload := ""
-		viewStored := ""
-		if source == db.EngineSourceUpload {
-			viewPath = ""
-			if path != "" {
-				viewUpload = filepath.Base(path)
-			}
-			viewStored = path
-		}
 		viewEngines = append(viewEngines, EngineView{
-			ID:         id,
-			Index:      len(engines) - 1,
-			Name:       name,
-			Source:     source,
-			Path:       viewPath,
-			Args:       args,
-			Init:       init,
-			UploadName: viewUpload,
-			StoredPath: viewStored,
+			ID:    id,
+			Index: len(engines) - 1,
+			Name:  name,
+			Path:  path,
+			Args:  args,
+			Init:  init,
 		})
 	}
 
@@ -686,12 +630,24 @@ func parseEnginesFromForm(r *http.Request, existing map[int64]db.Engine) ([]db.E
 	return engines, AdminView{Engines: viewEngines}, true
 }
 
-func normalizeEngineSource(source string) string {
-	value := strings.TrimSpace(source)
-	if value == "" {
-		return db.EngineSourceExternal
+func listEngineBinaries(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
 	}
-	return value
+	options := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		options = append(options, name)
+	}
+	sort.Strings(options)
+	return options, nil
 }
 
 func engineNameFromPath(path string) string {
@@ -730,114 +686,6 @@ func (h *Handler) uniqueEngineName(ctx context.Context, base string) (string, er
 		}
 	}
 	return fmt.Sprintf("%s (%d)", name, time.Now().Unix()), nil
-}
-
-func storeEngineUpload(uploadDir string, file io.Reader, filename string) (string, string, error) {
-	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
-		return "", "", fmt.Errorf("create upload dir: %w", err)
-	}
-	base := sanitizeEngineFilename(filepath.Base(filename))
-	if base == "" {
-		base = "engine"
-	}
-	tmp, err := os.CreateTemp(uploadDir, "upload-*")
-	if err != nil {
-		return "", "", fmt.Errorf("create temp upload: %w", err)
-	}
-	defer tmp.Close()
-
-	h := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(tmp, h), file); err != nil {
-		_ = os.Remove(tmp.Name())
-		return "", "", fmt.Errorf("save upload: %w", err)
-	}
-	sum := hex.EncodeToString(h.Sum(nil))
-	ext := filepath.Ext(base)
-	nameOnly := strings.TrimSuffix(base, ext)
-	storedName := fmt.Sprintf("%s-%s%s", nameOnly, sum[:12], ext)
-	storedPath := filepath.Join(uploadDir, storedName)
-
-	if _, err := os.Stat(storedPath); err == nil {
-		_ = os.Remove(tmp.Name())
-	} else if err := os.Rename(tmp.Name(), storedPath); err != nil {
-		_ = os.Remove(tmp.Name())
-		return "", "", fmt.Errorf("finalize upload: %w", err)
-	}
-	if err := validateEngineBinary(storedPath); err != nil {
-		_ = os.Remove(storedPath)
-		return "", "", err
-	}
-	_ = os.Chmod(storedPath, 0o755)
-	return storedPath, storedName, nil
-}
-
-func validateEngineBinary(path string) error {
-	f, err := elf.Open(path)
-	if err != nil {
-		return fmt.Errorf("uploaded engine is not a Linux ELF binary: %w", err)
-	}
-	defer f.Close()
-	expected := expectedELFMachine()
-	if expected == elf.EM_NONE {
-		return nil
-	}
-	if f.Machine != expected {
-		return fmt.Errorf("engine architecture mismatch: expected %s, got %s", machineName(expected), machineName(f.Machine))
-	}
-	return nil
-}
-
-func expectedELFMachine() elf.Machine {
-	switch runtime.GOARCH {
-	case "amd64":
-		return elf.EM_X86_64
-	case "386":
-		return elf.EM_386
-	case "arm64":
-		return elf.EM_AARCH64
-	case "arm":
-		return elf.EM_ARM
-	default:
-		return elf.EM_NONE
-	}
-}
-
-func machineName(m elf.Machine) string {
-	switch m {
-	case elf.EM_X86_64:
-		return "x86_64"
-	case elf.EM_386:
-		return "x86"
-	case elf.EM_AARCH64:
-		return "arm64"
-	case elf.EM_ARM:
-		return "arm"
-	default:
-		return fmt.Sprintf("machine-%d", int(m))
-	}
-}
-
-func sanitizeEngineFilename(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return ""
-	}
-	var b strings.Builder
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r)
-		case r >= 'A' && r <= 'Z':
-			b.WriteRune(r)
-		case r >= '0' && r <= '9':
-			b.WriteRune(r)
-		case r == '.', r == '-', r == '_':
-			b.WriteRune(r)
-		default:
-			b.WriteRune('_')
-		}
-	}
-	return b.String()
 }
 
 func parsePairsFromForm(r *http.Request, rulesetID int64) []db.Matchup {
@@ -950,30 +798,15 @@ func orderEngines(engines []db.Engine, order []string) []db.Engine {
 func buildEngineViewsFromList(engines []db.Engine, errByIndex map[int]string, gameCounts map[int64]int, matchupCounts map[int64]int) []EngineView {
 	views := make([]EngineView, 0, len(engines))
 	for i, e := range engines {
-		source := e.Source
-		if source == "" {
-			source = db.EngineSourceExternal
-		}
-		path := e.Path
-		uploadName := ""
-		storedPath := ""
-		if source == db.EngineSourceUpload {
-			uploadName = filepath.Base(e.Path)
-			storedPath = e.Path
-			path = ""
-		}
 		view := EngineView{
-			ID:         e.ID,
-			Index:      i,
-			Name:       e.Name,
-			Source:     source,
-			Path:       path,
-			Args:       e.Args,
-			Init:       e.Init,
-			UploadName: uploadName,
-			StoredPath: storedPath,
-			Games:      gameCounts[e.ID],
-			Matchups:   matchupCounts[e.ID],
+			ID:       e.ID,
+			Index:    i,
+			Name:     e.Name,
+			Path:     e.Path,
+			Args:     e.Args,
+			Init:     e.Init,
+			Games:    gameCounts[e.ID],
+			Matchups: matchupCounts[e.ID],
 		}
 		if errByIndex != nil {
 			view.Error = errByIndex[i]

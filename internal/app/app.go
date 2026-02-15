@@ -23,12 +23,13 @@ type App struct {
 	closeOnce sync.Once
 }
 
-func New(dataDir string, dbPath string, configPath string, engineUploadDir string) (*App, error) {
+func New(dataDir string, dbPath string, configPath string) (*App, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
-	if err := os.MkdirAll(engineUploadDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create engine upload dir: %w", err)
+	enginesDir := filepath.Join(dataDir, "engines")
+	if err := os.MkdirAll(enginesDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create engines dir: %w", err)
 	}
 	booksDir := filepath.Join(dataDir, "books")
 	if err := os.MkdirAll(booksDir, 0o755); err != nil {
@@ -49,7 +50,7 @@ func New(dataDir string, dbPath string, configPath string, engineUploadDir strin
 	r.Start(context.Background())
 	an := engine.NewAnalyzer(sqlDB, configStore)
 
-	h := web.NewHandler(sqlDB, configStore, r, b, an, engineUploadDir, booksDir)
+	h := web.NewHandler(sqlDB, configStore, r, b, an, enginesDir, booksDir)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
