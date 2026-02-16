@@ -9,10 +9,10 @@ import (
 )
 
 type RankingRow struct {
-	Rank        int
-	Name        string
-	Elo         float64
-	Games       int
+	Rank  int
+	Name  string
+	Elo   float64
+	Games int
 }
 
 type MatchupBreakdown struct {
