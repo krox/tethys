@@ -17,9 +17,8 @@ func main() {
 	listenAddr := getenv("TETHYS_LISTEN_ADDR", ":8080")
 	dataDir := getenv("TETHYS_DATA_DIR", "./data")
 	dbPath := filepath.Join(dataDir, "tethys.sqlite")
-	configPath := filepath.Join(dataDir, "config.json")
 
-	application, err := app.New(dataDir, dbPath, configPath)
+	application, err := app.New(dataDir, dbPath)
 	if err != nil {
 		log.Fatal(err)
 	}

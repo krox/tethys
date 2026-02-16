@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"tethys/internal/configstore"
 	"tethys/internal/db"
 	"tethys/internal/engine"
 	"tethys/internal/web"
@@ -23,7 +22,7 @@ type App struct {
 	closeOnce sync.Once
 }
 
-func New(dataDir string, dbPath string, configPath string) (*App, error) {
+func New(dataDir string, dbPath string) (*App, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
@@ -40,17 +39,12 @@ func New(dataDir string, dbPath string, configPath string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	configStore, err := configstore.New(configPath)
-	if err != nil {
-		_ = sqlDB.Close()
-		return nil, err
-	}
 	b := engine.NewBroadcaster()
-	r := engine.NewRunner(sqlDB, configStore, b)
+	r := engine.NewRunner(sqlDB, b)
 	r.Start(context.Background())
-	an := engine.NewAnalyzer(sqlDB, configStore)
+	an := engine.NewAnalyzer(sqlDB)
 
-	h := web.NewHandler(sqlDB, configStore, r, b, an, enginesDir, booksDir)
+	h := web.NewHandler(sqlDB, r, b, an, enginesDir, booksDir)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 

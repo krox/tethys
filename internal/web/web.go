@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"net/http"
 
-	"tethys/internal/configstore"
 	"tethys/internal/db"
 	"tethys/internal/engine"
 )
@@ -19,7 +18,6 @@ var staticFS embed.FS
 
 type Handler struct {
 	store      *db.Store
-	conf       *configstore.Store
 	r          *engine.Runner
 	b          *engine.Broadcaster
 	an         *engine.Analyzer
@@ -29,11 +27,10 @@ type Handler struct {
 	tpl *template.Template
 }
 
-func NewHandler(store *db.Store, conf *configstore.Store, r *engine.Runner, b *engine.Broadcaster, an *engine.Analyzer, enginesDir string, booksDir string) *Handler {
+func NewHandler(store *db.Store, r *engine.Runner, b *engine.Broadcaster, an *engine.Analyzer, enginesDir string, booksDir string) *Handler {
 	tpl := template.Must(template.New("base").ParseFS(templatesFS, "templates/*.html"))
 	return &Handler{
 		store:      store,
-		conf:       conf,
 		r:          r,
 		b:          b,
 		an:         an,

@@ -12,7 +12,6 @@ import (
 	"github.com/notnil/chess"
 
 	"tethys/internal/book"
-	"tethys/internal/configstore"
 	"tethys/internal/db"
 )
 
@@ -38,7 +37,6 @@ type SquareView struct {
 
 type Runner struct {
 	store    *db.Store
-	config   *configstore.Store
 	b        *Broadcaster
 	seq      int64
 	pickIdx  int
@@ -55,14 +53,13 @@ type Runner struct {
 	running   bool
 }
 
-func NewRunner(store *db.Store, config *configstore.Store, b *Broadcaster) *Runner {
+func NewRunner(store *db.Store, b *Broadcaster) *Runner {
 	start := chess.StartingPosition()
 	r := &Runner{
-		store:  store,
-		config: config,
-		b:      b,
-		stop:   make(chan struct{}),
-		live:   LiveState{Status: "starting", FEN: start.String(), Board: boardFromPosition(start)},
+		store: store,
+		b:     b,
+		stop:  make(chan struct{}),
+		live:  LiveState{Status: "starting", FEN: start.String(), Board: boardFromPosition(start)},
 	}
 	if store != nil {
 		if latest, err := store.LatestGame(context.Background()); err == nil {

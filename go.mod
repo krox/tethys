@@ -4,6 +4,7 @@ go 1.22
 
 require (
 	github.com/notnil/chess v1.10.0
+	github.com/jmoiron/sqlx v1.4.0
 	modernc.org/sqlite v1.29.0
 )
 

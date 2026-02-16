@@ -11,7 +11,6 @@ import (
 	"github.com/notnil/chess"
 
 	"tethys/internal/book"
-	"tethys/internal/configstore"
 	"tethys/internal/db"
 )
 
@@ -29,17 +28,15 @@ type AnalysisInfo struct {
 
 type Analyzer struct {
 	store *db.Store
-	conf  *configstore.Store
 
 	mu     sync.Mutex
 	jobs   map[uint64]context.CancelFunc
 	latest map[uint64]AnalysisInfo
 }
 
-func NewAnalyzer(store *db.Store, conf *configstore.Store) *Analyzer {
+func NewAnalyzer(store *db.Store) *Analyzer {
 	return &Analyzer{
 		store:  store,
-		conf:   conf,
 		jobs:   make(map[uint64]context.CancelFunc),
 		latest: make(map[uint64]AnalysisInfo),
 	}
@@ -94,7 +91,7 @@ func (a *Analyzer) run(ctx context.Context, key uint64, fenKey string, fullFen s
 		a.mu.Unlock()
 	}()
 
-	cfg, err := a.conf.GetConfig(ctx)
+	cfg, err := a.store.GetSettings(ctx)
 	if err != nil {
 		a.updateError(key, fenKey, fmt.Sprintf("config error: %v", err))
 		return

@@ -13,7 +13,7 @@ func (h *Handler) handleOpeningFragment(w http.ResponseWriter, r *http.Request) 
 		maxPlies = 16
 		maxGames = 2000
 	)
-	conf, err := h.conf.GetConfig(r.Context())
+	conf, err := h.store.GetSettings(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

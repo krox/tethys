@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"tethys/internal/configstore"
 	"tethys/internal/db"
 	"tethys/internal/engine"
 )
@@ -25,7 +24,7 @@ func (h *Handler) handleAdminRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
-	cfg, err := h.conf.GetConfig(r.Context())
+	cfg, err := h.store.GetSettings(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -47,7 +46,7 @@ func (h *Handler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	cfg, err := h.conf.GetConfig(r.Context())
+	cfg, err := h.store.GetSettings(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -67,7 +66,7 @@ func (h *Handler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request
 	cfg.AnalysisDepth = analysisDepth
 	cfg.AnalysisEngineID = analysisEngineID
 
-	if err := h.conf.UpdateConfig(r.Context(), cfg); err != nil {
+	if err := h.store.UpdateSettings(r.Context(), cfg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -75,7 +74,7 @@ func (h *Handler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handler) handleAdminMatches(w http.ResponseWriter, r *http.Request) {
-	cfg, err := h.conf.GetConfig(r.Context())
+	cfg, err := h.store.GetSettings(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -204,7 +203,7 @@ func (h *Handler) handleAdminRulesetDelete(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *Handler) handleAdminEngines(w http.ResponseWriter, r *http.Request) {
-	cfg, err := h.conf.GetConfig(r.Context())
+	cfg, err := h.store.GetSettings(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -245,12 +244,6 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	cfg, err := h.conf.GetConfig(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	current, err := h.store.ListEngines(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -335,6 +328,11 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		matchups, err := h.store.ListMatchups(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		cfg, err := h.store.GetSettings(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -478,14 +476,14 @@ type PairView struct {
 }
 
 type AdminView struct {
-	Cfg            configstore.Config
+	Cfg            db.Settings
 	Engines        []EngineView
 	Pairs          []PairView
 	EngineBinaries []string
 	Page           string
 }
 
-func buildAdminView(cfg configstore.Config, engines []db.Engine, matchups []db.Matchup, errByID map[int64]string, gameCounts map[int64]int, matchupCounts map[int64]int) AdminView {
+func buildAdminView(cfg db.Settings, engines []db.Engine, matchups []db.Matchup, errByID map[int64]string, gameCounts map[int64]int, matchupCounts map[int64]int) AdminView {
 	views := make([]EngineView, 0, len(engines))
 	for i, e := range engines {
 		view := EngineView{

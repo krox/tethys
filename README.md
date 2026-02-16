@@ -38,7 +38,6 @@ Environment variables:
 
 Storage locations (relative to `$TETHYS_DATA_DIR`):
 - database: `tethys.sqlite`
-- config: `config.json`
 - uploads: `engine_bins/`
 
 Engine settings are stored in a JSON file and edited in the admin UI.
