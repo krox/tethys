@@ -32,7 +32,7 @@ type RankingView struct {
 }
 
 func (h *Handler) handleResults(w http.ResponseWriter, r *http.Request) {
-	engines, err := h.store.ListEngines(r.Context())
+	engines, err := h.store.ListAllEngines(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

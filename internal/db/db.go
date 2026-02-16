@@ -509,6 +509,28 @@ func (s *Store) ListEngines(ctx context.Context) ([]Engine, error) {
 	return out, rows.Err()
 }
 
+func (s *Store) ListAllEngines(ctx context.Context) ([]Engine, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, name, COALESCE(engine_path, ''), engine_args, engine_init, COALESCE(engine_elo, 0)
+		FROM players
+		ORDER BY id ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Engine
+	for rows.Next() {
+		var e Engine
+		if err := rows.Scan(&e.ID, &e.Name, &e.Path, &e.Args, &e.Init, &e.Elo); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) InsertEngine(ctx context.Context, e Engine) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `
 		INSERT INTO players (name, engine_path, engine_args, engine_init)
