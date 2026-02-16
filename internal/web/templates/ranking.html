@@ -20,13 +20,16 @@
             <h1>Ranking</h1>
 
             <div class="card">
-                <h2>Bradley–Terry ranking</h2>
+                <h2>Elo ranking (Bradley–Terry fit)</h2>
+                <form method="post" action="/results/recompute" class="row" style="margin-bottom: 12px;">
+                    <button type="submit">Recompute ranking</button>
+                </form>
                 <table class="table">
                     <thead>
                         <tr>
                             <th>#</th>
                             <th>Engine</th>
-                            <th>Strength</th>
+                            <th>Elo</th>
                             <th>Games</th>
                             <th>Matchups</th>
                         </tr>
@@ -36,7 +39,7 @@
                         <tr>
                             <td>{{.Rank}}</td>
                             <td>{{.Name}}</td>
-                            <td class="mono">{{printf "%.4f" .Strength}}</td>
+                            <td class="mono">{{if gt .Elo 0}}{{printf "%.0f" .Elo}}{{else}}—{{end}}</td>
                             <td>{{.Games}}</td>
                             <td>
                                 <details class="matchup-details">

@@ -11,10 +11,8 @@ import (
 type RankingRow struct {
 	Rank        int
 	Name        string
-	Strength    float64
-	ScorePct    float64
+	Elo         float64
 	Games       int
-	StrengthPct float64
 }
 
 type MatchupBreakdown struct {
@@ -34,28 +32,59 @@ type RankingView struct {
 }
 
 func (h *Handler) handleResults(w http.ResponseWriter, r *http.Request) {
+	engines, err := h.store.ListEngines(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	rows, err := h.store.ResultsByPair(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	rankings := computeBradleyTerry(rows)
 	matchupsByEngine := buildMatchupsByEngine(rows)
-	view := make([]RankingView, 0, len(rankings))
-	for _, r := range rankings {
-		matchups := matchupsByEngine[r.Name]
+	gamesByEngine := buildGamesByEngine(rows)
+	ordered := append([]db.Engine(nil), engines...)
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].Elo == ordered[j].Elo {
+			return ordered[i].Name < ordered[j].Name
+		}
+		return ordered[i].Elo > ordered[j].Elo
+	})
+	view := make([]RankingView, 0, len(ordered))
+	for i, eng := range ordered {
+		matchups := matchupsByEngine[eng.Name]
 		sort.Slice(matchups, func(i, j int) bool {
 			if matchups[i].Total == matchups[j].Total {
 				return matchups[i].Opponent < matchups[j].Opponent
 			}
 			return matchups[i].Total > matchups[j].Total
 		})
-		view = append(view, RankingView{RankingRow: r, Matchups: matchups})
+		view = append(view, RankingView{RankingRow: RankingRow{
+			Rank:  i + 1,
+			Name:  eng.Name,
+			Elo:   eng.Elo,
+			Games: gamesByEngine[eng.Name],
+		}, Matchups: matchups})
 	}
 	_ = h.tpl.ExecuteTemplate(w, "ranking.html", map[string]any{
 		"Rankings": view,
 		"Page":     "ranking",
 	})
+}
+
+func (h *Handler) handleRankingRecompute(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.store.ResultsByPair(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	elos := computeBradleyTerryElos(rows, 3600)
+	if err := h.store.ReplaceEngineElos(r.Context(), elos); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/results", http.StatusSeeOther)
 }
 
 func buildMatchupsByEngine(rows []db.PairResult) map[string][]MatchupBreakdown {
@@ -92,22 +121,36 @@ func buildMatchupsByEngine(rows []db.PairResult) map[string][]MatchupBreakdown {
 	return matchups
 }
 
-func computeBradleyTerry(rows []db.PairResult) []RankingRow {
+func buildGamesByEngine(rows []db.PairResult) map[string]int {
+	games := make(map[string]int)
+	for _, row := range rows {
+		total := row.WinsA + row.WinsB + row.Draws
+		if total == 0 {
+			continue
+		}
+		games[row.EngineA] += total
+		if row.EngineA != row.EngineB {
+			games[row.EngineB] += total
+		}
+	}
+	return games
+}
+
+func computeBradleyTerryElos(rows []db.PairResult, topElo float64) map[int64]float64 {
 	index := make(map[string]int)
+	ids := make([]int64, 0)
 	for _, row := range rows {
 		if _, ok := index[row.EngineA]; !ok {
 			index[row.EngineA] = len(index)
+			ids = append(ids, row.EngineAID)
 		}
 		if _, ok := index[row.EngineB]; !ok {
 			index[row.EngineB] = len(index)
+			ids = append(ids, row.EngineBID)
 		}
 	}
 	if len(index) == 0 {
-		return nil
-	}
-	engineNames := make([]string, len(index))
-	for name, idx := range index {
-		engineNames[idx] = name
+		return map[int64]float64{}
 	}
 
 	n := len(index)
@@ -185,38 +228,28 @@ func computeBradleyTerry(rows []db.PairResult) []RankingRow {
 	if maxStrength == 0 {
 		maxStrength = 1
 	}
+	minStrength := maxStrength * 1e-6
+	if minStrength <= 0 {
+		minStrength = 1e-6
+	}
 
-	result := make([]RankingRow, 0, n)
+	elos := make(map[int64]float64, n)
 	for i := 0; i < n; i++ {
 		totalGames := 0.0
-		winScore := 0.0
 		for j := 0; j < n; j++ {
 			if i == j {
 				continue
 			}
 			totalGames += games[i][j]
-			winScore += wins[i][j]
 		}
 		if totalGames == 0 {
 			continue
 		}
-		result = append(result, RankingRow{
-			Name:        engineNames[i],
-			Strength:    strength[i],
-			ScorePct:    winScore * 100 / totalGames,
-			Games:       int(totalGames),
-			StrengthPct: strength[i] * 100 / maxStrength,
-		})
-	}
-
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].Strength == result[j].Strength {
-			return result[i].Name < result[j].Name
+		s := strength[i]
+		if s < minStrength {
+			s = minStrength
 		}
-		return result[i].Strength > result[j].Strength
-	})
-	for i := range result {
-		result[i].Rank = i + 1
+		elos[ids[i]] = topElo + 400*math.Log10(s/maxStrength)
 	}
-	return result
+	return elos
 }

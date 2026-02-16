@@ -20,6 +20,7 @@ var schema_stmts = []string{
 		engine_path TEXT NULL,
 		engine_args TEXT NOT NULL DEFAULT '',
 		engine_init TEXT NOT NULL DEFAULT '',
+		engine_elo REAL NOT NULL DEFAULT 0,
 		UNIQUE(name)
 	);`,
 	`CREATE TABLE IF NOT EXISTS rulesets (
@@ -101,6 +102,10 @@ func Open(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("default ruleset: %w", err)
 	}
+	if err := ensureEngineEloColumn(db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("engine elo: %w", err)
+	}
 	return &Store{db: db}, nil
 }
 
@@ -127,6 +132,32 @@ func ensureDefaultRulesetExists(db *sql.DB) error {
 		INSERT INTO rulesets (movetime_ms, book_path, book_max_plies)
 		VALUES (?, NULL, 0)
 	`, defaultRulesetMovetimeMS)
+	return err
+}
+
+func ensureEngineEloColumn(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(players)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return err
+		}
+		if name == "engine_elo" {
+			return rows.Err()
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = db.Exec(`ALTER TABLE players ADD COLUMN engine_elo REAL NOT NULL DEFAULT 0`)
 	return err
 }
 
@@ -158,6 +189,7 @@ type Engine struct {
 	Path string
 	Args string
 	Init string
+	Elo  float64
 }
 
 type Matchup struct {
@@ -456,7 +488,7 @@ func (s *Store) SearchGames(ctx context.Context, filter GameSearchFilter, limit 
 
 func (s *Store) ListEngines(ctx context.Context) ([]Engine, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, COALESCE(engine_path, ''), engine_args, engine_init
+		SELECT id, name, COALESCE(engine_path, ''), engine_args, engine_init, COALESCE(engine_elo, 0)
 		FROM players
 		WHERE engine_path IS NOT NULL AND engine_path != ''
 		ORDER BY id ASC
@@ -469,7 +501,7 @@ func (s *Store) ListEngines(ctx context.Context) ([]Engine, error) {
 	var out []Engine
 	for rows.Next() {
 		var e Engine
-		if err := rows.Scan(&e.ID, &e.Name, &e.Path, &e.Args, &e.Init); err != nil {
+		if err := rows.Scan(&e.ID, &e.Name, &e.Path, &e.Args, &e.Init, &e.Elo); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
@@ -504,15 +536,52 @@ func (s *Store) DeleteEngine(ctx context.Context, id int64) error {
 
 func (s *Store) EngineByID(ctx context.Context, id int64) (Engine, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, name, COALESCE(engine_path, ''), engine_args, engine_init
+		SELECT id, name, COALESCE(engine_path, ''), engine_args, engine_init, COALESCE(engine_elo, 0)
 		FROM players
 		WHERE id = ?
 	`, id)
 	var e Engine
-	if err := row.Scan(&e.ID, &e.Name, &e.Path, &e.Args, &e.Init); err != nil {
+	if err := row.Scan(&e.ID, &e.Name, &e.Path, &e.Args, &e.Init, &e.Elo); err != nil {
 		return Engine{}, err
 	}
 	return e, nil
+}
+
+func (s *Store) ReplaceEngineElos(ctx context.Context, elos map[int64]float64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err = tx.ExecContext(ctx, `
+		UPDATE players
+		SET engine_elo = 0
+		WHERE engine_path IS NOT NULL AND engine_path != ''
+	`); err != nil {
+		return err
+	}
+
+	stmt, err := tx.PrepareContext(ctx, `UPDATE players SET engine_elo = ? WHERE id = ?`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for id, elo := range elos {
+		if _, err = stmt.ExecContext(ctx, elo, id); err != nil {
+			return err
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Store) EngineIDByName(ctx context.Context, name string) (int64, error) {

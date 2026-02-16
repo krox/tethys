@@ -58,6 +58,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /opening/fragment", h.handleOpeningFragment)
 	mux.HandleFunc("GET /book", h.handleBookExplorer)
 	mux.HandleFunc("GET /results", h.handleResults)
+	mux.HandleFunc("POST /results/recompute", h.handleRankingRecompute)
 	mux.HandleFunc("GET /positions/view", h.handlePositionView)
 	mux.HandleFunc("GET /api/positions/eval", h.handlePositionEval)
 	mux.HandleFunc("GET /api/positions/move", h.handlePositionMove)

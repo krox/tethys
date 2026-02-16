@@ -100,18 +100,11 @@ func (h *Handler) handleAdminMatches(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	results, err := h.store.ResultsByPair(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 	selectedRulesetID := selectRulesetID(r, rulesets)
 	filteredMatchups := filterMatchupsByRuleset(matchups, selectedRulesetID)
-	ranking := computeBradleyTerry(results)
-	order := matchOrder(engines, ranking)
-	orderedEngines := orderEngines(engines, order)
+	orderedEngines := orderEnginesByElo(engines)
 	rows := buildMatchRows(orderedEngines, filteredMatchups)
-	strengths := matchStrengths(ranking, orderedEngines)
+	strengths := mapEngineElos(orderedEngines)
 	_ = h.tpl.ExecuteTemplate(w, "match_settings.html", map[string]any{
 		"Cfg":       cfg,
 		"Rows":      rows,
@@ -795,6 +788,17 @@ func orderEngines(engines []db.Engine, order []string) []db.Engine {
 	return ordered
 }
 
+func orderEnginesByElo(engines []db.Engine) []db.Engine {
+	ordered := append([]db.Engine(nil), engines...)
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].Elo == ordered[j].Elo {
+			return ordered[i].Name < ordered[j].Name
+		}
+		return ordered[i].Elo > ordered[j].Elo
+	})
+	return ordered
+}
+
 func buildEngineViewsFromList(engines []db.Engine, errByIndex map[int]string, gameCounts map[int64]int, matchupCounts map[int64]int) []EngineView {
 	views := make([]EngineView, 0, len(engines))
 	for i, e := range engines {
@@ -980,19 +984,15 @@ func matchOrder(engines []db.Engine, ranking []RankingRow) []string {
 	return ranked
 }
 
-func matchStrengths(ranking []RankingRow, engines []db.Engine) map[string]float64 {
-	strengths := make(map[string]float64)
-	allowed := make(map[string]bool)
-	for _, name := range engineNames(engines) {
-		allowed[name] = true
-	}
-	for _, r := range ranking {
-		if !allowed[r.Name] {
+func mapEngineElos(engines []db.Engine) map[string]float64 {
+	elos := make(map[string]float64)
+	for _, e := range engines {
+		if e.Name == "" {
 			continue
 		}
-		strengths[r.Name] = r.ScorePct
+		elos[e.Name] = e.Elo
 	}
-	return strengths
+	return elos
 }
 
 func testEngines(ctx context.Context, engines []db.Engine) map[int]string {

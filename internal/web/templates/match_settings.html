@@ -81,7 +81,7 @@
                         <thead>
                             <tr>
                                 <th>Engine</th>
-                                <th class="matrix-head strength-head">Strength</th>
+                                <th class="matrix-head strength-head">Elo</th>
                                 {{range .Engines}}
                                 <th class="matrix-head matrix-head-col"><span class="matrix-head-text">{{.Name}}</span>
                                 </th>
@@ -93,7 +93,7 @@
                             <tr>
                                 <th class="matrix-head">{{.EngineName}}</th>
                                 <td class="matrix-cell strength-cell">
-                                    {{with (index $.Strengths .EngineName)}}{{printf "%.1f" .}}%{{else}}—{{end}}
+                                    {{with (index $.Strengths .EngineName)}}{{if gt . 0}}{{printf "%.0f" .}}{{else}}—{{end}}{{else}}—{{end}}
                                 </td>
                                 {{range .Cells}}
                                 <td class="matrix-cell" data-a="{{.AID}}" data-b="{{.BID}}">
