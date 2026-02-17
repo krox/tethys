@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"strings"
@@ -16,7 +15,6 @@ import (
 )
 
 type LiveState struct {
-	GameID     int64
 	CreatedAt  string
 	White      string
 	Black      string
@@ -38,7 +36,6 @@ type SquareView struct {
 type Runner struct {
 	store    *db.Store
 	b        *Broadcaster
-	seq      int64
 	pickIdx  int
 	bookMu   sync.Mutex
 	bookPath string
@@ -60,13 +57,6 @@ func NewRunner(store *db.Store, b *Broadcaster) *Runner {
 		b:     b,
 		stop:  make(chan struct{}),
 		live:  LiveState{Status: "starting", FEN: start.String(), Board: boardFromPosition(start)},
-	}
-	if store != nil {
-		if latest, err := store.LatestGame(context.Background()); err == nil {
-			r.seq = latest.ID
-		} else if err != sql.ErrNoRows {
-			log.Printf("runner: latest game lookup failed: %v", err)
-		}
 	}
 	return r
 }
@@ -186,9 +176,7 @@ func (r *Runner) loop(parent context.Context) {
 			whiteDisplay := assignment.White.Name
 			blackDisplay := assignment.Black.Name
 
-			r.seq++
 			r.setLive(func(ls *LiveState) {
-				ls.GameID = r.seq
 				ls.White = whiteDisplay
 				ls.Black = blackDisplay
 				ls.MovetimeMS = assignment.MovetimeMS

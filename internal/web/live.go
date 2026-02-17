@@ -39,7 +39,6 @@ func (h *Handler) handleLiveJSON(w http.ResponseWriter, r *http.Request) {
 	live := h.r.Live()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"game_id":     live.GameID,
 		"status":      live.Status,
 		"white":       live.White,
 		"black":       live.Black,
