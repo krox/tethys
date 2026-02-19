@@ -34,10 +34,21 @@ func (h *Handler) handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	books, err := listBookOptions(h.booksDir)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	bookName := ""
+	if strings.TrimSpace(cfg.GameBookPath) != "" {
+		bookName = filepath.Base(cfg.GameBookPath)
+	}
 	_ = h.tpl.ExecuteTemplate(w, "global_settings.html", map[string]any{
-		"Cfg":     cfg,
-		"Engines": engines,
-		"Page":    "settings",
+		"Cfg":      cfg,
+		"Engines":  engines,
+		"Books":    books,
+		"BookName": bookName,
+		"Page":     "settings",
 	})
 }
 
@@ -61,10 +72,40 @@ func (h *Handler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request
 		analysisDepth = 12
 	}
 	analysisEngineID, _ := strconv.ParseInt(strings.TrimSpace(r.Form.Get("analysis_engine_id")), 10, 64)
+	gameMovetime, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("game_movetime_ms")))
+	if gameMovetime <= 0 {
+		gameMovetime = 100
+	}
+	gameBook := strings.TrimSpace(r.Form.Get("game_book"))
+	if gameBook == "(none)" {
+		gameBook = ""
+	}
+	gameBookPath := ""
+	if gameBook != "" {
+		options, err := listBookOptions(h.booksDir)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		valid := false
+		for _, name := range options {
+			if name == gameBook {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			http.Error(w, "invalid book selection", http.StatusBadRequest)
+			return
+		}
+		gameBookPath = filepath.Join(h.booksDir, gameBook)
+	}
 
 	cfg.OpeningMin = openingMin
 	cfg.AnalysisDepth = analysisDepth
 	cfg.AnalysisEngineID = analysisEngineID
+	cfg.GameMovetimeMS = gameMovetime
+	cfg.GameBookPath = gameBookPath
 
 	if err := h.store.UpdateSettings(r.Context(), cfg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -89,20 +130,8 @@ func (h *Handler) handleAdminMatches(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	rulesets, err := h.store.ListRulesets(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	bookOptions, err := listBookOptions(h.booksDir)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	selectedRulesetID := selectRulesetID(r, rulesets)
-	filteredMatchups := filterMatchupsByRuleset(matchups, selectedRulesetID)
 	orderedEngines := orderEnginesByElo(engines)
-	rows := buildMatchRows(orderedEngines, filteredMatchups)
+	rows := buildMatchRows(orderedEngines, matchups)
 	strengths := mapEngineElos(orderedEngines)
 	_ = h.tpl.ExecuteTemplate(w, "match_settings.html", map[string]any{
 		"Cfg":       cfg,
@@ -110,9 +139,6 @@ func (h *Handler) handleAdminMatches(w http.ResponseWriter, r *http.Request) {
 		"Engines":   buildEngineHeaders(orderedEngines),
 		"Strengths": strengths,
 		"PairCount": matchCellCount(rows),
-		"Rulesets":  buildRulesetViews(rulesets),
-		"Books":     bookOptions,
-		"RulesetID": selectedRulesetID,
 		"Page":      "matches",
 	})
 }
@@ -122,80 +148,8 @@ func (h *Handler) handleAdminMatchesSave(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	rulesetID, _ := strconv.ParseInt(strings.TrimSpace(r.Form.Get("ruleset_id")), 10, 64)
-	if rulesetID <= 0 {
-		http.Error(w, "missing ruleset", http.StatusBadRequest)
-		return
-	}
-	if _, err := h.store.RulesetByID(r.Context(), rulesetID); err != nil {
-		http.Error(w, "invalid ruleset", http.StatusBadRequest)
-		return
-	}
-	matchups := parsePairsFromForm(r, rulesetID)
-	if err := h.store.ReplaceMatchupsForRuleset(r.Context(), rulesetID, matchups); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, fmt.Sprintf("/admin/matches?ruleset_id=%d", rulesetID), http.StatusSeeOther)
-}
-
-func (h *Handler) handleAdminRulesetAdd(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	movetime, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("ruleset_movetime_ms")))
-	if movetime <= 0 {
-		movetime = 100
-	}
-	bookName := strings.TrimSpace(r.Form.Get("ruleset_book"))
-	if bookName == "(none)" {
-		bookName = ""
-	}
-	bookMaxPlies, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("ruleset_book_max_plies")))
-	bookPath := ""
-	if bookName == "" {
-		bookMaxPlies = 0
-	} else {
-		options, err := listBookOptions(h.booksDir)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		valid := false
-		for _, name := range options {
-			if name == bookName {
-				valid = true
-				break
-			}
-		}
-		if !valid {
-			http.Error(w, "invalid book selection", http.StatusBadRequest)
-			return
-		}
-		bookPath = filepath.Join(h.booksDir, bookName)
-		if bookMaxPlies <= 0 {
-			bookMaxPlies = 16
-		}
-	}
-	if _, err := h.store.InsertRuleset(r.Context(), movetime, bookPath, bookMaxPlies); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, "/admin/matches", http.StatusSeeOther)
-}
-
-func (h *Handler) handleAdminRulesetDelete(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	toDelete, _ := strconv.ParseInt(strings.TrimSpace(r.Form.Get("ruleset_id")), 10, 64)
-	if toDelete <= 0 {
-		http.Error(w, "missing ruleset", http.StatusBadRequest)
-		return
-	}
-	if err := h.store.DeleteRuleset(r.Context(), toDelete); err != nil {
+	matchups := parsePairsFromForm(r)
+	if err := h.store.ReplaceMatchups(r.Context(), matchups); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -479,8 +433,8 @@ type AdminView struct {
 	Cfg            db.Settings
 	Engines        []EngineView
 	Pairs          []PairView
-	EngineBinaries []string
 	Page           string
+	EngineBinaries []string
 }
 
 func buildAdminView(cfg db.Settings, engines []db.Engine, matchups []db.Matchup, errByID map[int64]string, gameCounts map[int64]int, matchupCounts map[int64]int) AdminView {
@@ -679,7 +633,7 @@ func (h *Handler) uniqueEngineName(ctx context.Context, base string) (string, er
 	return fmt.Sprintf("%s (%d)", name, time.Now().Unix()), nil
 }
 
-func parsePairsFromForm(r *http.Request, rulesetID int64) []db.Matchup {
+func parsePairsFromForm(r *http.Request) []db.Matchup {
 	count, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("pair_count")))
 	if count < 0 {
 		count = 0
@@ -703,39 +657,9 @@ func parsePairsFromForm(r *http.Request, rulesetID int64) []db.Matchup {
 			continue
 		}
 		seen[key] = true
-		pairs = append(pairs, db.Matchup{PlayerAID: key[0], PlayerBID: key[1], RulesetID: rulesetID})
+		pairs = append(pairs, db.Matchup{PlayerAID: key[0], PlayerBID: key[1]})
 	}
 	return pairs
-}
-
-func selectRulesetID(r *http.Request, rulesets []db.Ruleset) int64 {
-	query := strings.TrimSpace(r.URL.Query().Get("ruleset_id"))
-	if query != "" {
-		if id, err := strconv.ParseInt(query, 10, 64); err == nil && id > 0 {
-			for _, rs := range rulesets {
-				if rs.ID == id {
-					return id
-				}
-			}
-		}
-	}
-	if len(rulesets) == 0 {
-		return 0
-	}
-	return rulesets[0].ID
-}
-
-func filterMatchupsByRuleset(matchups []db.Matchup, rulesetID int64) []db.Matchup {
-	if rulesetID == 0 {
-		return nil
-	}
-	filtered := make([]db.Matchup, 0, len(matchups))
-	for _, m := range matchups {
-		if m.RulesetID == rulesetID {
-			filtered = append(filtered, m)
-		}
-	}
-	return filtered
 }
 
 func minString(a, b string) string {
@@ -838,30 +762,6 @@ type MatchCell struct {
 	BID     int64
 	Label   string
 	Enabled bool
-}
-
-type RulesetView struct {
-	ID           int64
-	MovetimeMS   int
-	BookName     string
-	BookMaxPlies int
-}
-
-func buildRulesetViews(rulesets []db.Ruleset) []RulesetView {
-	views := make([]RulesetView, 0, len(rulesets))
-	for _, rs := range rulesets {
-		bookName := ""
-		if strings.TrimSpace(rs.BookPath) != "" {
-			bookName = filepath.Base(rs.BookPath)
-		}
-		views = append(views, RulesetView{
-			ID:           rs.ID,
-			MovetimeMS:   rs.MovetimeMS,
-			BookName:     bookName,
-			BookMaxPlies: rs.BookMaxPlies,
-		})
-	}
-	return views
 }
 
 func listBookOptions(dir string) ([]string, error) {

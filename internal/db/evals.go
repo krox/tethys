@@ -2,6 +2,7 @@ package db
 
 import "context"
 
+// find an evaluation by its zobrist key
 func (s *Store) EvalByZobrist(ctx context.Context, key uint64) (Eval, error) {
 	var e Eval
 	err := s.db.GetContext(ctx, &e, `
@@ -12,6 +13,7 @@ func (s *Store) EvalByZobrist(ctx context.Context, key uint64) (Eval, error) {
 	return e, err
 }
 
+// insert or update an evaluation
 func (s *Store) UpsertEval(ctx context.Context, e Eval) error {
 	_, err := s.db.NamedExecContext(ctx, `
 		INSERT INTO evals (zobrist_key, fen, score, pv, engine_id, depth)

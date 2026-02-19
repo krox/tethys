@@ -20,62 +20,7 @@
             <h1>Match Settings</h1>
 
             <div class="card">
-                <h2>Rulesets</h2>
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Movetime (ms)</th>
-                            <th>Book</th>
-                            <th>Book max plies</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {{range .Rulesets}}
-                        <tr>
-                            <td>{{.ID}}</td>
-                            <td>{{.MovetimeMS}}</td>
-                            <td>{{if .BookName}}{{.BookName}}{{else}}(none){{end}}</td>
-                            <td>{{if .BookName}}{{.BookMaxPlies}}{{else}}—{{end}}</td>
-                            <td>
-                                <form method="post" action="/admin/rulesets/delete">
-                                    <input type="hidden" name="ruleset_id" value="{{.ID}}" />
-                                    <button type="submit">Delete</button>
-                                </form>
-                            </td>
-                        </tr>
-                        {{end}}
-                    </tbody>
-                </table>
-                <form method="post" action="/admin/rulesets/add" class="form">
-                    <label>Movetime (ms)</label>
-                    <input name="ruleset_movetime_ms" placeholder="100" />
-                    <label>Opening book</label>
-                    <select name="ruleset_book" id="ruleset-book">
-                        <option value="">(none)</option>
-                        {{range .Books}}
-                        <option value="{{.}}">{{.}}</option>
-                        {{end}}
-                    </select>
-                    <label>Opening book max plies</label>
-                    <input name="ruleset_book_max_plies" id="ruleset-book-max-plies" placeholder="16" disabled />
-                    <div class="row">
-                        <button type="submit">Add ruleset</button>
-                    </div>
-                </form>
-            </div>
-
-            <div class="card">
                 <form method="post" action="/admin/matches" class="form">
-                    <label>Ruleset</label>
-                    <select name="ruleset_id" id="ruleset-select">
-                        {{range .Rulesets}}
-                        <option value="{{.ID}}" {{if eq .ID $.RulesetID}}selected{{end}}>
-                            {{.MovetimeMS}} ms{{if .BookName}} · {{.BookName}}{{else}} · no book{{end}}
-                        </option>
-                        {{end}}
-                    </select>
                     <input type="hidden" name="pair_count" value="{{.PairCount}}" />
                     <table class="table matrix-table">
                         <thead>
@@ -120,30 +65,6 @@
 
     <script>
         (function () {
-            const rulesetSelect = document.getElementById('ruleset-select');
-            if (rulesetSelect) {
-                rulesetSelect.addEventListener('change', () => {
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('ruleset_id', rulesetSelect.value);
-                    window.location = url.toString();
-                });
-            }
-
-            const bookSelect = document.getElementById('ruleset-book');
-            const bookMaxPlies = document.getElementById('ruleset-book-max-plies');
-            function syncBookMaxPlies() {
-                if (!bookSelect || !bookMaxPlies) return;
-                const hasBook = bookSelect.value && bookSelect.value !== '';
-                bookMaxPlies.disabled = !hasBook;
-                if (!hasBook) {
-                    bookMaxPlies.value = '';
-                }
-            }
-            if (bookSelect) {
-                bookSelect.addEventListener('change', syncBookMaxPlies);
-                syncBookMaxPlies();
-            }
-
             const cells = Array.from(document.querySelectorAll('.matrix-cell'));
             const byKey = new Map();
 

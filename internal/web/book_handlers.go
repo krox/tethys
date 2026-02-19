@@ -31,18 +31,12 @@ func (h *Handler) handleBookExplorer(w http.ResponseWriter, r *http.Request) {
 		"Page": "book",
 	}
 
-	rulesets, err := h.store.ListRulesets(ctx)
+	settings, err := h.store.GetSettings(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	bookPath := ""
-	for _, rs := range rulesets {
-		if strings.TrimSpace(rs.BookPath) != "" {
-			bookPath = rs.BookPath
-			break
-		}
-	}
+	bookPath := strings.TrimSpace(settings.GameBookPath)
 
 	if bookPath == "" {
 		view["Error"] = "No opening book configured."

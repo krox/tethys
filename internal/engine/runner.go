@@ -118,8 +118,7 @@ func (r *Runner) loop(parent context.Context) {
 			counts := []db.MatchupCount{}
 			engines := []db.Engine{}
 			matchups := []db.Matchup{}
-			rulesets := make(map[int64]db.Ruleset)
-			defaultRuleset := db.Ruleset{}
+			settings := db.Settings{}
 			if r.store != nil {
 				if rows, err := r.store.ListMatchupCounts(ctx); err == nil {
 					counts = rows
@@ -136,30 +135,14 @@ func (r *Runner) loop(parent context.Context) {
 				} else {
 					log.Printf("runner: matchup list error: %v", err)
 				}
-				if rows, err := r.store.ListRulesets(ctx); err == nil {
-					for _, rs := range rows {
-						rulesets[rs.ID] = rs
-						if defaultRuleset.ID == 0 || rs.ID < defaultRuleset.ID {
-							defaultRuleset = rs
-						}
-					}
+				if cfg, err := r.store.GetSettings(ctx); err == nil {
+					settings = cfg
 				} else {
-					log.Printf("runner: ruleset list error: %v", err)
+					log.Printf("runner: settings error: %v", err)
 				}
 			}
-			if defaultRuleset.MovetimeMS == 0 {
-				defaultRuleset.MovetimeMS = 100
-			}
-
-			assignment, nextIdx := selectAssignment(defaultRuleset, engines, matchups, rulesets, counts, r.pickIdx)
+			assignment, nextIdx := selectAssignment(settings.GameMovetimeMS, settings.GameBookPath, engines, matchups, counts, r.pickIdx)
 			r.pickIdx = nextIdx
-			if assignment.RulesetID == 0 && defaultRuleset.ID != 0 {
-				assignment.RulesetID = defaultRuleset.ID
-				assignment.MovetimeMS = defaultRuleset.MovetimeMS
-				assignment.BookPath = defaultRuleset.BookPath
-				assignment.BookMaxPlies = defaultRuleset.BookMaxPlies
-				assignment.BookEnabled = defaultRuleset.BookPath != ""
-			}
 
 			if assignment.White.Path == "" || assignment.Black.Path == "" {
 				start := chess.StartingPosition()
@@ -282,7 +265,7 @@ func (r *Runner) loop(parent context.Context) {
 				if len(movesUCI) >= 400 {
 					result := "1/2-1/2"
 					termination := "Max plies"
-					_, err := r.store.InsertFinishedGame(ctx, assignment.White.ID, assignment.Black.ID, assignment.RulesetID, result, termination, strings.Join(movesUCI, " "), bookPlies)
+					_, err := r.store.InsertFinishedGame(ctx, assignment.White.ID, assignment.Black.ID, assignment.MovetimeMS, assignment.BookPath, result, termination, strings.Join(movesUCI, " "), bookPlies)
 					if err != nil {
 						log.Printf("runner: insert game error: %v", err)
 					}
@@ -307,7 +290,7 @@ func (r *Runner) loop(parent context.Context) {
 
 				if game.Outcome() != chess.NoOutcome {
 					result, termination := outcomeToResult(game)
-					_, err := r.store.InsertFinishedGame(ctx, assignment.White.ID, assignment.Black.ID, assignment.RulesetID, result, termination, strings.Join(movesUCI, " "), bookPlies)
+					_, err := r.store.InsertFinishedGame(ctx, assignment.White.ID, assignment.Black.ID, assignment.MovetimeMS, assignment.BookPath, result, termination, strings.Join(movesUCI, " "), bookPlies)
 					if err != nil {
 						log.Printf("runner: insert game error: %v", err)
 					}

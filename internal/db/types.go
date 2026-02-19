@@ -1,9 +1,11 @@
 package db
 
 type Settings struct {
-	OpeningMin       int   `db:"opening_min"`
-	AnalysisEngineID int64 `db:"analysis_engine_id"`
-	AnalysisDepth    int   `db:"analysis_depth"`
+	OpeningMin       int    `db:"opening_min"`
+	AnalysisEngineID int64  `db:"analysis_engine_id"`
+	AnalysisDepth    int    `db:"analysis_depth"`
+	GameMovetimeMS   int    `db:"game_movetime_ms"`
+	GameBookPath     string `db:"game_book_path"`
 }
 
 type GameDetail struct {
@@ -41,14 +43,6 @@ type Matchup struct {
 	ID        int64 `db:"id"`
 	PlayerAID int64 `db:"player_a_id"`
 	PlayerBID int64 `db:"player_b_id"`
-	RulesetID int64 `db:"ruleset_id"`
-}
-
-type Ruleset struct {
-	ID           int64  `db:"id"`
-	MovetimeMS   int    `db:"movetime_ms"`
-	BookPath     string `db:"book_path"`
-	BookMaxPlies int    `db:"book_max_plies"`
 }
 
 type GameSearchFilter struct {
@@ -82,17 +76,15 @@ type MatchupSummary struct {
 	A          string
 	B          string
 	MovetimeMS int
-	RulesetID  int64
 	WinsA      int
 	WinsB      int
 	Draws      int
 }
 
 type MatchupCount struct {
-	WhiteID   int64 `db:"white_id"`
-	BlackID   int64 `db:"black_id"`
-	RulesetID int64 `db:"ruleset_id"`
-	Count     int   `db:"count"`
+	WhiteID int64 `db:"white_id"`
+	BlackID int64 `db:"black_id"`
+	Count   int   `db:"count"`
 }
 
 type ResultSummary struct {

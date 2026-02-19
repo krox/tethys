@@ -42,17 +42,28 @@ func (h *Handler) handleResults(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if len(engines) == 0 && len(rows) > 0 {
+		byID := make(map[int64]db.Engine)
+		for _, row := range rows {
+			if row.EngineAID != 0 {
+				byID[row.EngineAID] = db.Engine{ID: row.EngineAID, Name: row.EngineA}
+			}
+			if row.EngineBID != 0 {
+				byID[row.EngineBID] = db.Engine{ID: row.EngineBID, Name: row.EngineB}
+			}
+		}
+		engines = make([]db.Engine, 0, len(byID))
+		for _, engine := range byID {
+			engines = append(engines, engine)
+		}
+		sort.Slice(engines, func(i, j int) bool {
+			return engines[i].Name < engines[j].Name
+		})
+	}
 	matchupsByEngine := buildMatchupsByEngine(rows)
 	gamesByEngine := buildGamesByEngine(rows)
-	ordered := append([]db.Engine(nil), engines...)
-	sort.Slice(ordered, func(i, j int) bool {
-		if ordered[i].Elo == ordered[j].Elo {
-			return ordered[i].Name < ordered[j].Name
-		}
-		return ordered[i].Elo > ordered[j].Elo
-	})
-	view := make([]RankingView, 0, len(ordered))
-	for i, eng := range ordered {
+	view := make([]RankingView, 0, len(engines))
+	for i, eng := range engines {
 		matchups := matchupsByEngine[eng.Name]
 		sort.Slice(matchups, func(i, j int) bool {
 			if matchups[i].Total == matchups[j].Total {

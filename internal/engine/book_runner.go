@@ -18,15 +18,11 @@ func (r *Runner) bookLine(start *chess.Position, assignment ColorAssignment) []s
 		return nil
 	}
 
-	maxPlies := assignment.BookMaxPlies
 	line := make([]string, 0, 8)
 	pos := start
 	notation := chess.UCINotation{}
 
 	for {
-		if maxPlies > 0 && len(line) >= maxPlies {
-			break
-		}
 		move, ok := bookObj.Lookup(pos)
 		if !ok {
 			break

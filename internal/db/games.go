@@ -3,11 +3,11 @@ package db
 import "context"
 
 // Add a finished game to the database. Returns the inserted games ID.
-func (s *Store) InsertFinishedGame(ctx context.Context, whiteID int64, blackID int64, rulesetID int64, result, termination, movesUCI string, bookPlies int) (int64, error) {
+func (s *Store) InsertFinishedGame(ctx context.Context, whiteID int64, blackID int64, movetimeMS int, bookPath string, result, termination, movesUCI string, bookPlies int) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO games (white_player_id, black_player_id, ruleset_id, result, termination, moves_uci, book_plies)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, whiteID, blackID, rulesetID, result, termination, movesUCI, bookPlies)
+		INSERT INTO games (white_player_id, black_player_id, movetime_ms, book_path, result, termination, moves_uci, book_plies)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, whiteID, blackID, movetimeMS, bookPath, result, termination, movesUCI, bookPlies)
 	if err != nil {
 		return 0, err
 	}
@@ -26,7 +26,7 @@ func (s *Store) ListFinishedGames(ctx context.Context, limit int) ([]GameDetail,
 			g.played_at,
 			w.name AS white,
 			b.name AS black,
-			r.movetime_ms,
+			g.movetime_ms,
 			CASE WHEN g.result = '' THEN '*' ELSE g.result END AS result,
 			g.termination AS termination,
 			g.moves_uci,
@@ -35,7 +35,6 @@ func (s *Store) ListFinishedGames(ctx context.Context, limit int) ([]GameDetail,
 		FROM games g
 		LEFT JOIN players w ON g.white_player_id = w.id
 		LEFT JOIN players b ON g.black_player_id = b.id
-		LEFT JOIN rulesets r ON g.ruleset_id = r.id
 		ORDER BY g.id DESC
 		LIMIT ?
 	`, limit)
@@ -87,7 +86,7 @@ func (s *Store) GetGame(ctx context.Context, id int64) (GameDetail, error) {
 			g.played_at,
 			w.name AS white,
 			b.name AS black,
-			r.movetime_ms,
+			g.movetime_ms,
 			CASE WHEN g.result = '' THEN '*' ELSE g.result END AS result,
 			g.termination AS termination,
 			g.moves_uci,
@@ -96,7 +95,6 @@ func (s *Store) GetGame(ctx context.Context, id int64) (GameDetail, error) {
 		FROM games g
 		LEFT JOIN players w ON g.white_player_id = w.id
 		LEFT JOIN players b ON g.black_player_id = b.id
-		LEFT JOIN rulesets r ON g.ruleset_id = r.id
 		WHERE g.id = ?
 	`, id)
 	return gd, err
@@ -130,7 +128,7 @@ func (s *Store) SearchGames(ctx context.Context, filter GameSearchFilter, limit 
 		args = append(args, filter.EngineID, filter.EngineID)
 	}
 	if filter.MovetimeMS > 0 {
-		where += " AND r.movetime_ms = ?"
+		where += " AND g.movetime_ms = ?"
 		args = append(args, filter.MovetimeMS)
 	}
 	if filter.Result != "" {
@@ -142,7 +140,7 @@ func (s *Store) SearchGames(ctx context.Context, filter GameSearchFilter, limit 
 		args = append(args, filter.Termination)
 	}
 
-	countQuery := "SELECT COUNT(*) FROM games g LEFT JOIN rulesets r ON g.ruleset_id = r.id " + where
+	countQuery := "SELECT COUNT(*) FROM games g " + where
 	var total int
 	if err := s.db.GetContext(ctx, &total, countQuery, args...); err != nil {
 		return 0, nil, err
@@ -153,7 +151,7 @@ func (s *Store) SearchGames(ctx context.Context, filter GameSearchFilter, limit 
 			g.played_at,
 			w.name AS white,
 			b.name AS black,
-			r.movetime_ms,
+			g.movetime_ms,
 			CASE WHEN g.result = '' THEN '*' ELSE g.result END AS result,
 			g.termination AS termination,
 			g.moves_uci,
@@ -162,7 +160,6 @@ func (s *Store) SearchGames(ctx context.Context, filter GameSearchFilter, limit 
 		FROM games g
 		LEFT JOIN players w ON g.white_player_id = w.id
 		LEFT JOIN players b ON g.black_player_id = b.id
-		LEFT JOIN rulesets r ON g.ruleset_id = r.id
 		` + where + `
 		ORDER BY g.id DESC
 		LIMIT ?
@@ -290,14 +287,13 @@ func (s *Store) ResultsByPair(ctx context.Context) ([]PairResult, error) {
 
 func (s *Store) ListMatchupSummaries(ctx context.Context) ([]MatchupSummary, error) {
 	type summaryRow struct {
-		WhiteID   int64  `db:"white_player_id"`
-		BlackID   int64  `db:"black_player_id"`
-		White     string `db:"white"`
-		Black     string `db:"black"`
-		Movetime  int    `db:"movetime_ms"`
-		RulesetID int64  `db:"ruleset_id"`
-		Result    string `db:"result"`
-		Count     int    `db:"count"`
+		WhiteID  int64  `db:"white_player_id"`
+		BlackID  int64  `db:"black_player_id"`
+		White    string `db:"white"`
+		Black    string `db:"black"`
+		Movetime int    `db:"movetime_ms"`
+		Result   string `db:"result"`
+		Count    int    `db:"count"`
 	}
 	var rows []summaryRow
 	if err := s.db.SelectContext(ctx, &rows, `
@@ -305,15 +301,13 @@ func (s *Store) ListMatchupSummaries(ctx context.Context) ([]MatchupSummary, err
 			g.black_player_id,
 			w.name AS white,
 			b.name AS black,
-			r.movetime_ms,
-			g.ruleset_id,
+				g.movetime_ms,
 			CASE WHEN g.result = '' THEN '*' ELSE g.result END AS result,
 			COUNT(*) AS count
 		FROM games g
 		LEFT JOIN players w ON g.white_player_id = w.id
 		LEFT JOIN players b ON g.black_player_id = b.id
-		LEFT JOIN rulesets r ON g.ruleset_id = r.id
-		GROUP BY g.white_player_id, g.black_player_id, g.ruleset_id, r.movetime_ms, result
+			GROUP BY g.white_player_id, g.black_player_id, g.movetime_ms, result
 	`); err != nil {
 		return nil, err
 	}
@@ -325,7 +319,6 @@ func (s *Store) ListMatchupSummaries(ctx context.Context) ([]MatchupSummary, err
 		white := row.White
 		black := row.Black
 		movetime := row.Movetime
-		rulesetID := row.RulesetID
 		result := row.Result
 		count := row.Count
 		if result != "1-0" && result != "0-1" && result != "1/2-1/2" {
@@ -339,10 +332,10 @@ func (s *Store) ListMatchupSummaries(ctx context.Context) ([]MatchupSummary, err
 			aID, bID = bID, aID
 			swap = true
 		}
-		key := [3]int64{aID, bID, rulesetID}
+		key := [3]int64{aID, bID, int64(movetime)}
 		entry, ok := counts[key]
 		if !ok {
-			entry = &MatchupSummary{A: a, B: b, AID: aID, BID: bID, MovetimeMS: movetime, RulesetID: rulesetID}
+			entry = &MatchupSummary{A: a, B: b, AID: aID, BID: bID, MovetimeMS: movetime}
 			counts[key] = entry
 		}
 		switch result {
@@ -375,10 +368,9 @@ func (s *Store) ListMatchupCounts(ctx context.Context) ([]MatchupCount, error) {
 	err := s.db.SelectContext(ctx, &out, `
 		SELECT g.white_player_id AS white_id,
 			g.black_player_id AS black_id,
-			g.ruleset_id,
 			COUNT(*) AS count
 		FROM games g
-		GROUP BY g.white_player_id, g.black_player_id, g.ruleset_id
+		GROUP BY g.white_player_id, g.black_player_id
 	`)
 	return out, err
 }
@@ -402,7 +394,7 @@ func (s *Store) MatchupMovesLines(ctx context.Context, a, b int64, movetimeMS in
 		SELECT moves_uci,
 			CASE WHEN result = '' THEN '*' ELSE result END AS result
 		FROM games
-		WHERE ruleset_id IN (SELECT id FROM rulesets WHERE movetime_ms = ?)
+		WHERE movetime_ms = ?
 		  AND ((white_player_id = ? AND black_player_id = ?) OR (white_player_id = ? AND black_player_id = ?))
 		ORDER BY id ASC
 	`, movetimeMS, a, b, b, a); err != nil {
@@ -455,7 +447,7 @@ func (s *Store) ResultMovesLines(ctx context.Context, result, termination string
 func (s *Store) DeleteMatchupGames(ctx context.Context, a, b int64, movetimeMS int) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `
 		DELETE FROM games
-		WHERE ruleset_id IN (SELECT id FROM rulesets WHERE movetime_ms = ?)
+		WHERE movetime_ms = ?
 		  AND ((white_player_id = ? AND black_player_id = ?) OR (white_player_id = ? AND black_player_id = ?))
 	`, movetimeMS, a, b, b, a)
 	if err != nil {

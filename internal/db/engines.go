@@ -158,7 +158,6 @@ func (s *Store) CountEngines(ctx context.Context) (int, error) {
 	err := s.db.GetContext(ctx, &count, `
 		SELECT COUNT(*)
 		FROM players
-		WHERE engine_path != ''
 	`)
 	return count, err
 }

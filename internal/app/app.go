@@ -49,7 +49,6 @@ func New(dataDir string, dbPath string) (*App, error) {
 	h.RegisterRoutes(mux)
 
 	return &App{
-		//db:         sqlDB,
 		runner: r,
 		mux:    mux,
 	}, nil

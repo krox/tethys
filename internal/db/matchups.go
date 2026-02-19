@@ -6,22 +6,22 @@ import "context"
 func (s *Store) ListMatchups(ctx context.Context) ([]Matchup, error) {
 	var out []Matchup
 	err := s.db.SelectContext(ctx, &out, `
-		SELECT player_a_id, player_b_id, ruleset_id
+		SELECT player_a_id, player_b_id
 		FROM matchups
 		ORDER BY id ASC
 	`)
 	return out, err
 }
 
-func (s *Store) ReplaceMatchupsForRuleset(ctx context.Context, rulesetID int64, matchups []Matchup) error {
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM matchups WHERE ruleset_id = ?`, rulesetID); err != nil {
+func (s *Store) ReplaceMatchups(ctx context.Context, matchups []Matchup) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM matchups`); err != nil {
 		return err
 	}
 	for _, m := range matchups {
 		_, err := s.db.ExecContext(ctx, `
-			INSERT OR IGNORE INTO matchups (player_a_id, player_b_id, ruleset_id)
-			VALUES (?, ?, ?)
-		`, m.PlayerAID, m.PlayerBID, m.RulesetID)
+			INSERT OR IGNORE INTO matchups (player_a_id, player_b_id)
+			VALUES (?, ?)
+		`, m.PlayerAID, m.PlayerBID)
 		if err != nil {
 			return err
 		}
