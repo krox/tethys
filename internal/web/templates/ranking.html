@@ -39,7 +39,7 @@
                         <tr>
                             <td>{{.Rank}}</td>
                             <td>{{.Name}}</td>
-                            <td class="mono">{{if gt .Elo 0}}{{printf "%.0f" .Elo}}{{else}}—{{end}}</td>
+                            <td class="mono">{{if gt .Elo 0.0}}{{printf "%.0f" .Elo}}{{else}}—{{end}}</td>
                             <td>{{.Games}}</td>
                             <td>
                                 <details class="matchup-details">

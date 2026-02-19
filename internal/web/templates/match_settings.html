@@ -38,7 +38,7 @@
                             <tr>
                                 <th class="matrix-head">{{.EngineName}}</th>
                                 <td class="matrix-cell strength-cell">
-                                    {{with (index $.Strengths .EngineName)}}{{if gt . 0}}{{printf "%.0f"
+                                    {{with (index $.Strengths .EngineName)}}{{if gt . 0.0}}{{printf "%.0f"
                                     .}}{{else}}—{{end}}{{else}}—{{end}}
                                 </td>
                                 {{range .Cells}}
