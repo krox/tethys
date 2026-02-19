@@ -23,15 +23,6 @@
                 <form method="post" action="/admin/settings" class="form">
                     <label>Opening min count (no split below)</label>
                     <input name="opening_min" value="{{.Cfg.OpeningMin}}" />
-                    <label>Game movetime (ms)</label>
-                    <input name="game_movetime_ms" value="{{.Cfg.GameMovetimeMS}}" />
-                    <label>Game opening book</label>
-                    <select name="game_book">
-                        <option value="">(none)</option>
-                        {{range .Books}}
-                        <option value="{{.}}" {{if eq . $.BookName}}selected{{end}}>{{.}}</option>
-                        {{end}}
-                    </select>
                     <label>Analysis engine</label>
                     <select name="analysis_engine_id">
                         <option value="">(none)</option>

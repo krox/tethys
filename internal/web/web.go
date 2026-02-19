@@ -73,6 +73,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/settings", h.handleAdminSettingsSave)
 	mux.HandleFunc("GET /admin/matches", h.handleAdminMatches)
 	mux.HandleFunc("POST /admin/matches", h.handleAdminMatchesSave)
+	mux.HandleFunc("POST /admin/matches/autoset", h.handleAdminMatchesAutoSet)
 	mux.HandleFunc("GET /admin/engines", h.handleAdminEngines)
 	mux.HandleFunc("POST /admin/engines", h.handleAdminEnginesSave)
 	mux.HandleFunc("POST /admin/engines/duplicate", h.handleAdminEngineDuplicate)

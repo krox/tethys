@@ -120,6 +120,15 @@ func (h *Handler) handleAdminMatches(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	books, err := listBookOptions(h.booksDir)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	bookName := ""
+	if strings.TrimSpace(cfg.GameBookPath) != "" {
+		bookName = filepath.Base(cfg.GameBookPath)
+	}
 	engines, err := h.store.ListEngines(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -139,6 +148,8 @@ func (h *Handler) handleAdminMatches(w http.ResponseWriter, r *http.Request) {
 		"Engines":   buildEngineHeaders(orderedEngines),
 		"Strengths": strengths,
 		"PairCount": matchCellCount(rows),
+		"Books":     books,
+		"BookName":  bookName,
 		"Page":      "matches",
 	})
 }
@@ -149,6 +160,21 @@ func (h *Handler) handleAdminMatchesSave(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	matchups := parsePairsFromForm(r)
+	if err := h.store.ReplaceMatchups(r.Context(), matchups); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/admin/matches", http.StatusSeeOther)
+}
+
+func (h *Handler) handleAdminMatchesAutoSet(w http.ResponseWriter, r *http.Request) {
+	engines, err := h.store.ListEngines(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	ordered := orderEnginesByElo(engines)
+	matchups := buildNeighborMatchups(ordered, 2)
 	if err := h.store.ReplaceMatchups(r.Context(), matchups); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -851,6 +877,43 @@ func matchCellCount(rows []MatchRow) int {
 		count += len(row.Cells)
 	}
 	return count
+}
+
+func buildNeighborMatchups(engines []db.Engine, radius int) []db.Matchup {
+	if radius < 1 || len(engines) == 0 {
+		return nil
+	}
+	pairs := make(map[[2]int64]bool)
+	for i, engine := range engines {
+		if engine.ID == 0 {
+			continue
+		}
+		start := i - radius
+		if start < 0 {
+			start = 0
+		}
+		end := i + radius
+		if end >= len(engines) {
+			end = len(engines) - 1
+		}
+		for j := start; j <= end; j++ {
+			if i == j {
+				continue
+			}
+			other := engines[j]
+			if other.ID == 0 {
+				continue
+			}
+			a := minInt(engine.ID, other.ID)
+			b := maxInt(engine.ID, other.ID)
+			pairs[[2]int64{a, b}] = true
+		}
+	}
+	out := make([]db.Matchup, 0, len(pairs))
+	for key := range pairs {
+		out = append(out, db.Matchup{PlayerAID: key[0], PlayerBID: key[1]})
+	}
+	return out
 }
 
 func matchOrder(engines []db.Engine, ranking []RankingRow) []string {

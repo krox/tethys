@@ -20,6 +20,30 @@
             <h1>Match Settings</h1>
 
             <div class="card">
+                <h2>Game Settings</h2>
+                <form method="post" action="/admin/settings" class="form">
+                    <input type="hidden" name="opening_min" value="{{.Cfg.OpeningMin}}" />
+                    <input type="hidden" name="analysis_engine_id" value="{{.Cfg.AnalysisEngineID}}" />
+                    <input type="hidden" name="analysis_depth" value="{{.Cfg.AnalysisDepth}}" />
+                    <label>Movetime (ms)</label>
+                    <input name="game_movetime_ms" value="{{.Cfg.GameMovetimeMS}}" />
+                    <label>Opening book</label>
+                    <select name="game_book">
+                        <option value="">(none)</option>
+                        {{range .Books}}
+                        <option value="{{.}}" {{if eq . $.BookName}}selected{{end}}>{{.}}</option>
+                        {{end}}
+                    </select>
+                    <div class="row">
+                        <button type="submit">Save</button>
+                        <button type="submit" formaction="/admin/matches/autoset" formmethod="post">
+                            Auto-set matchups
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card">
                 <form method="post" action="/admin/matches" class="form">
                     <input type="hidden" name="pair_count" value="{{.PairCount}}" />
                     <table class="table matrix-table">
