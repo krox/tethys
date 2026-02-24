@@ -227,6 +227,7 @@ func (r *Runner) loop(parent context.Context) {
 			game := chess.NewGame()
 			movesUCI := make([]string, 0, 256)
 			bookPlies := 0
+			engineLogs := make([]db.EngineLog, 0, 256)
 
 			bookMoves := r.bookLine(game.Position(), assignment)
 			if len(bookMoves) > 0 {
@@ -265,9 +266,11 @@ func (r *Runner) loop(parent context.Context) {
 				if len(movesUCI) >= 400 {
 					result := "1/2-1/2"
 					termination := "Max plies"
-					_, err := r.store.InsertFinishedGame(ctx, assignment.White.ID, assignment.Black.ID, assignment.MovetimeMS, assignment.BookPath, result, termination, strings.Join(movesUCI, " "), bookPlies)
+					gameID, err := r.store.InsertFinishedGame(ctx, assignment.White.ID, assignment.Black.ID, assignment.MovetimeMS, assignment.BookPath, result, termination, strings.Join(movesUCI, " "), bookPlies)
 					if err != nil {
 						log.Printf("runner: insert game error: %v", err)
+					} else if err := r.store.InsertEngineLogs(ctx, gameID, engineLogs); err != nil {
+						log.Printf("runner: insert engine logs error: %v", err)
 					}
 					r.setLive(func(ls *LiveState) {
 						ls.Status = "finished"
@@ -290,9 +293,11 @@ func (r *Runner) loop(parent context.Context) {
 
 				if game.Outcome() != chess.NoOutcome {
 					result, termination := outcomeToResult(game)
-					_, err := r.store.InsertFinishedGame(ctx, assignment.White.ID, assignment.Black.ID, assignment.MovetimeMS, assignment.BookPath, result, termination, strings.Join(movesUCI, " "), bookPlies)
+					gameID, err := r.store.InsertFinishedGame(ctx, assignment.White.ID, assignment.Black.ID, assignment.MovetimeMS, assignment.BookPath, result, termination, strings.Join(movesUCI, " "), bookPlies)
 					if err != nil {
 						log.Printf("runner: insert game error: %v", err)
+					} else if err := r.store.InsertEngineLogs(ctx, gameID, engineLogs); err != nil {
+						log.Printf("runner: insert engine logs error: %v", err)
 					}
 					r.setLive(func(ls *LiveState) {
 						ls.Status = "finished"
@@ -310,7 +315,8 @@ func (r *Runner) loop(parent context.Context) {
 					eng = black
 				}
 
-				best, err := eng.BestMoveMovetime(ctx, movesUCI, assignment.MovetimeMS)
+				ply := len(movesUCI) + 1
+				best, logLines, err := eng.BestMoveMovetime(ctx, movesUCI, assignment.MovetimeMS)
 				if err != nil {
 					r.failGame(ctx, "*", fmt.Sprintf("bestmove error: %v", err))
 					return
@@ -318,6 +324,17 @@ func (r *Runner) loop(parent context.Context) {
 				if best == "(none)" || best == "0000" {
 					r.failGame(ctx, "*", "engine returned no move")
 					return
+				}
+				if len(logLines) > 0 {
+					engineID := assignment.White.ID
+					if !isWhiteToMove {
+						engineID = assignment.Black.ID
+					}
+					engineLogs = append(engineLogs, db.EngineLog{
+						Ply:      ply,
+						EngineID: engineID,
+						Log:      strings.Join(logLines, "\n"),
+					})
 				}
 
 				n := chess.UCINotation{}

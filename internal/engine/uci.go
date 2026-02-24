@@ -129,34 +129,39 @@ func (e *UCIEngine) NewGame(ctx context.Context) error {
 	return e.IsReady(ctx)
 }
 
-func (e *UCIEngine) BestMoveMovetime(ctx context.Context, movesUCI []string, movetimeMS int) (string, error) {
+func (e *UCIEngine) BestMoveMovetime(ctx context.Context, movesUCI []string, movetimeMS int) (string, []string, error) {
 	pos := "position startpos"
 	if len(movesUCI) > 0 {
 		pos += " moves " + strings.Join(movesUCI, " ")
 	}
 	if err := e.Send(pos); err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if err := e.Send(fmt.Sprintf("go movetime %d", movetimeMS)); err != nil {
-		return "", err
+		return "", nil, err
 	}
+
+	lines := make([]string, 0, 64)
 
 	for {
 		line, err := e.out.ReadString('\n')
 		if err != nil {
-			return "", err
+			return "", lines, err
 		}
 		line = strings.TrimSpace(line)
+		if line != "" {
+			lines = append(lines, line)
+		}
 		if strings.HasPrefix(line, "bestmove ") {
 			parts := strings.Fields(line)
 			if len(parts) >= 2 {
-				return parts[1], nil
+				return parts[1], lines, nil
 			}
-			return "", fmt.Errorf("malformed bestmove: %q", line)
+			return "", lines, fmt.Errorf("malformed bestmove: %q", line)
 		}
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return "", lines, ctx.Err()
 		default:
 		}
 	}

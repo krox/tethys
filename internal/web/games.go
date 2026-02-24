@@ -298,8 +298,16 @@ func (h *Handler) handleGameView(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	view, err := buildGameView(game)
+	logs, err := h.store.ListEngineLogsByGame(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	logByPly := make(map[int]string, len(logs))
+	for _, entry := range logs {
+		logByPly[entry.Ply] = entry.Log
+	}
+	view, err := buildGameView(game, logByPly)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -312,6 +320,8 @@ type GameMoveView struct {
 	Index int
 	UCI   string
 	SAN   string
+	Side  string
+	Log   string
 }
 
 type GamePositionView struct {
@@ -333,7 +343,10 @@ type GameView struct {
 	Page        string
 }
 
-func buildGameView(game db.GameDetail) (GameView, error) {
+func buildGameView(game db.GameDetail, logByPly map[int]string) (GameView, error) {
+	if logByPly == nil {
+		logByPly = map[int]string{}
+	}
 	pos := chess.StartingPosition()
 	positions := []GamePositionView{{Index: 0, Board: boardFromPosition(pos), FEN: pos.String()}}
 	moves := make([]GameMoveView, 0)
@@ -356,7 +369,12 @@ func buildGameView(game db.GameDetail) (GameView, error) {
 				break
 			}
 			pos = g.Position()
-			moves = append(moves, GameMoveView{Index: i + 1, UCI: uci, SAN: san})
+			ply := i + 1
+			side := "White"
+			if ply%2 == 0 {
+				side = "Black"
+			}
+			moves = append(moves, GameMoveView{Index: ply, UCI: uci, SAN: san, Side: side, Log: logByPly[ply]})
 			positions = append(positions, GamePositionView{Index: i + 1, Board: boardFromPosition(pos), FEN: pos.String()})
 		}
 	}

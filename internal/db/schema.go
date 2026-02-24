@@ -53,6 +53,13 @@ var schema_stmts = []string{
 		engine_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
 		depth INTEGER NOT NULL DEFAULT 0
 	);`,
+	`CREATE TABLE IF NOT EXISTS engine_logs (
+		game_id INTEGER NOT NULL REFERENCES games(id) ON UPDATE CASCADE ON DELETE CASCADE,
+		ply INTEGER NOT NULL,
+		engine_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+		log TEXT NOT NULL,
+		PRIMARY KEY (game_id, ply, engine_id)
+	);`,
 	`CREATE TABLE IF NOT EXISTS settings (
 		key TEXT PRIMARY KEY,
 		value
@@ -65,6 +72,7 @@ var schema_stmts = []string{
 	`CREATE INDEX IF NOT EXISTS idx_games_black_player_id ON games(black_player_id);`,
 	`CREATE INDEX IF NOT EXISTS idx_games_matchup ON games(white_player_id, black_player_id);`,
 	`CREATE INDEX IF NOT EXISTS idx_evals_engine_id ON evals(engine_id);`,
+	`CREATE INDEX IF NOT EXISTS idx_engine_logs_game_ply ON engine_logs(game_id, ply);`,
 	`CREATE INDEX IF NOT EXISTS idx_matchups_player_a_id ON matchups(player_a_id);`,
 	`CREATE INDEX IF NOT EXISTS idx_matchups_player_b_id ON matchups(player_b_id);`,
 }

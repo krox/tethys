@@ -57,9 +57,15 @@
                 <h2>Moves</h2>
                 <ol id="move_list" class="moves-list">
                     {{range .Moves}}
-                    <li data-index="{{.Index}}">{{.SAN}}</li>
+                    <li data-index="{{.Index}}" data-log="{{.Log}}" data-side="{{.Side}}">{{.SAN}}</li>
                     {{end}}
                 </ol>
+            </div>
+
+            <div class="card" style="margin-top: 16px;">
+                <h2>Engine Log</h2>
+                <div class="hint" id="engine_log_side"></div>
+                <pre class="mono" id="engine_log">No log for this ply.</pre>
             </div>
         </main>
     </div>
@@ -72,6 +78,8 @@
             const nextBtn = document.getElementById('next_move');
             const idxLabel = document.getElementById('move_index');
             const analyzeLink = document.getElementById('analyze_position');
+            const logView = document.getElementById('engine_log');
+            const logSide = document.getElementById('engine_log_side');
             let idx = 0;
 
             function setActive(index) {
@@ -83,6 +91,15 @@
                 if (frame && analyzeLink) {
                     const fen = frame.dataset.fen || '';
                     analyzeLink.href = fen ? `/positions/view?fen=${encodeURIComponent(fen)}` : '/positions/view';
+                }
+                if (logView) {
+                    const move = moves.find((m) => Number(m.dataset.index) === idx);
+                    const log = move ? (move.dataset.log || '') : '';
+                    const side = move ? (move.dataset.side || '') : '';
+                    logView.textContent = log.trim() === '' ? 'No log for this ply.' : log;
+                    if (logSide) {
+                        logSide.textContent = side ? `${side} to move` : '';
+                    }
                 }
             }
 
