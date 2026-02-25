@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -316,15 +317,14 @@ func (r *Runner) loop(parent context.Context) {
 				}
 
 				ply := len(movesUCI) + 1
-				best, logLines, err := eng.BestMoveMovetime(ctx, movesUCI, assignment.MovetimeMS)
-				if err != nil {
-					r.failGame(ctx, "*", fmt.Sprintf("bestmove error: %v", err))
-					return
+				moveTimeoutMS := assignment.MovetimeMS
+				if moveTimeoutMS <= 0 {
+					moveTimeoutMS = 100
 				}
-				if best == "(none)" || best == "0000" {
-					r.failGame(ctx, "*", "engine returned no move")
-					return
-				}
+				moveTimeoutMS += moveTimeoutMS / 5
+				moveCtx, cancelMove := context.WithTimeout(ctx, time.Duration(moveTimeoutMS)*time.Millisecond)
+				best, logLines, err := eng.BestMoveMovetime(moveCtx, movesUCI, assignment.MovetimeMS)
+				cancelMove()
 				if len(logLines) > 0 {
 					engineID := assignment.White.ID
 					if !isWhiteToMove {
@@ -336,16 +336,32 @@ func (r *Runner) loop(parent context.Context) {
 						Log:      strings.Join(logLines, "\n"),
 					})
 				}
+				if err != nil {
+					if errors.Is(err, context.Canceled) {
+						r.failGame(ctx, "*", "service stopping")
+						return
+					}
+					termination := "EngineCrash"
+					if errors.Is(err, context.DeadlineExceeded) {
+						termination = "Timeout"
+					}
+					r.recordFailedGame(ctx, assignment, isWhiteToMove, movesUCI, bookPlies, termination, engineLogs)
+					return
+				}
+				if best == "(none)" || best == "0000" {
+					r.recordFailedGame(ctx, assignment, isWhiteToMove, movesUCI, bookPlies, "NoMove", engineLogs)
+					return
+				}
 
 				n := chess.UCINotation{}
 				mv, err := n.Decode(game.Position(), best)
 				if err != nil {
-					r.failGame(ctx, "*", fmt.Sprintf("illegal move from engine: %s (%v)", best, err))
+					r.recordFailedGame(ctx, assignment, isWhiteToMove, movesUCI, bookPlies, "IllegalMove", engineLogs)
 					return
 				}
 
 				if err := game.Move(mv); err != nil {
-					r.failGame(ctx, "*", fmt.Sprintf("move apply error: %s (%v)", best, err))
+					r.recordFailedGame(ctx, assignment, isWhiteToMove, movesUCI, bookPlies, "IllegalMove", engineLogs)
 					return
 				}
 
@@ -365,6 +381,24 @@ func (r *Runner) loop(parent context.Context) {
 }
 
 func (r *Runner) failGame(ctx context.Context, result, termination string) {
+	r.setLive(func(ls *LiveState) {
+		ls.Status = "finished"
+		ls.Result = result
+	})
+	r.b.Publish()
+}
+
+func (r *Runner) recordFailedGame(ctx context.Context, assignment ColorAssignment, isWhiteToMove bool, movesUCI []string, bookPlies int, termination string, engineLogs []db.EngineLog) {
+	result := "1-0"
+	if isWhiteToMove {
+		result = "0-1"
+	}
+	gameID, err := r.store.InsertFinishedGame(ctx, assignment.White.ID, assignment.Black.ID, assignment.MovetimeMS, assignment.BookPath, result, termination, strings.Join(movesUCI, " "), bookPlies)
+	if err != nil {
+		log.Printf("runner: insert game error: %v", err)
+	} else if err := r.store.InsertEngineLogs(ctx, gameID, engineLogs); err != nil {
+		log.Printf("runner: insert engine logs error: %v", err)
+	}
 	r.setLive(func(ls *LiveState) {
 		ls.Status = "finished"
 		ls.Result = result

@@ -17,6 +17,8 @@ type UCIEngine struct {
 	cmd   *exec.Cmd
 	stdin io.WriteCloser
 	out   *bufio.Reader
+	lines chan string
+	errs  chan error
 }
 
 func NewUCIEngine(path string, args []string) *UCIEngine {
@@ -39,10 +41,14 @@ func (e *UCIEngine) Start(ctx context.Context) error {
 	}
 	e.stdin = stdin
 	e.out = bufio.NewReader(io.MultiReader(stdout, stderr))
+	e.lines = make(chan string, 128)
+	e.errs = make(chan error, 1)
 
 	if err := e.cmd.Start(); err != nil {
 		return err
 	}
+
+	go e.readLoop()
 
 	if err := e.Send("uci"); err != nil {
 		return err
@@ -88,28 +94,19 @@ func (e *UCIEngine) ReadLine() (string, error) {
 	if e.out == nil {
 		return "", fmt.Errorf("engine not started")
 	}
-	return e.out.ReadString('\n')
+	return e.readLine(context.Background())
 }
 
 func (e *UCIEngine) ReadUntilPrefix(ctx context.Context, prefix string, timeout time.Duration) (string, error) {
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	for {
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-deadline.C:
-			return "", fmt.Errorf("timeout waiting for %q", prefix)
-		default:
-			line, err := e.out.ReadString('\n')
-			if err != nil {
-				return "", err
-			}
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, prefix) {
-				return line, nil
-			}
+		line, err := e.readLine(ctx)
+		if err != nil {
+			return "", err
+		}
+		if strings.HasPrefix(line, prefix) {
+			return line, nil
 		}
 	}
 }
@@ -144,11 +141,10 @@ func (e *UCIEngine) BestMoveMovetime(ctx context.Context, movesUCI []string, mov
 	lines := make([]string, 0, 64)
 
 	for {
-		line, err := e.out.ReadString('\n')
+		line, err := e.readLine(ctx)
 		if err != nil {
 			return "", lines, err
 		}
-		line = strings.TrimSpace(line)
 		if line != "" {
 			lines = append(lines, line)
 		}
@@ -159,10 +155,37 @@ func (e *UCIEngine) BestMoveMovetime(ctx context.Context, movesUCI []string, mov
 			}
 			return "", lines, fmt.Errorf("malformed bestmove: %q", line)
 		}
-		select {
-		case <-ctx.Done():
-			return "", lines, ctx.Err()
-		default:
+	}
+}
+
+func (e *UCIEngine) readLoop() {
+	for {
+		line, err := e.out.ReadString('\n')
+		if err != nil {
+			e.errs <- err
+			close(e.lines)
+			return
 		}
+		line = strings.TrimSpace(line)
+		e.lines <- line
+	}
+}
+
+func (e *UCIEngine) readLine(ctx context.Context) (string, error) {
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case err := <-e.errs:
+		return "", err
+	case line, ok := <-e.lines:
+		if !ok {
+			select {
+			case err := <-e.errs:
+				return "", err
+			default:
+				return "", io.EOF
+			}
+		}
+		return line, nil
 	}
 }
