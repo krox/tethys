@@ -173,10 +173,6 @@ func (e *UCIEngine) readLoop() {
 
 func (e *UCIEngine) readLine(ctx context.Context) (string, error) {
 	select {
-	case <-ctx.Done():
-		return "", ctx.Err()
-	case err := <-e.errs:
-		return "", err
 	case line, ok := <-e.lines:
 		if !ok {
 			select {
@@ -187,5 +183,23 @@ func (e *UCIEngine) readLine(ctx context.Context) (string, error) {
 			}
 		}
 		return line, nil
+	default:
+	}
+
+	select {
+	case line, ok := <-e.lines:
+		if !ok {
+			select {
+			case err := <-e.errs:
+				return "", err
+			default:
+				return "", io.EOF
+			}
+		}
+		return line, nil
+	case err := <-e.errs:
+		return "", err
+	case <-ctx.Done():
+		return "", ctx.Err()
 	}
 }
