@@ -134,57 +134,12 @@ func (h *Handler) handleAdminMatches(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(cfg.GameBookPath) != "" {
 		bookName = filepath.Base(cfg.GameBookPath)
 	}
-	engines, err := h.store.ListEngines(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	matchups, err := h.store.ListMatchups(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	orderedEngines := orderEnginesByElo(engines)
-	rows := buildMatchRows(orderedEngines, matchups)
-	strengths := mapEngineElos(orderedEngines)
 	_ = h.tpl.ExecuteTemplate(w, "match_settings.html", map[string]any{
-		"Cfg":       cfg,
-		"Rows":      rows,
-		"Engines":   buildEngineHeaders(orderedEngines),
-		"Strengths": strengths,
-		"PairCount": matchCellCount(rows),
-		"Books":     books,
-		"BookName":  bookName,
-		"Page":      "matches",
+		"Cfg":      cfg,
+		"Books":    books,
+		"BookName": bookName,
+		"Page":     "matches",
 	})
-}
-
-func (h *Handler) handleAdminMatchesSave(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	matchups := parsePairsFromForm(r)
-	if err := h.store.ReplaceMatchups(r.Context(), matchups); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, "/admin/matches", http.StatusSeeOther)
-}
-
-func (h *Handler) handleAdminMatchesAutoSet(w http.ResponseWriter, r *http.Request) {
-	engines, err := h.store.ListEngines(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	ordered := orderEnginesByElo(engines)
-	matchups := buildNeighborMatchups(ordered, 2)
-	if err := h.store.ReplaceMatchups(r.Context(), matchups); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	http.Redirect(w, r, "/admin/matches", http.StatusSeeOther)
 }
 
 func (h *Handler) handleAdminEngines(w http.ResponseWriter, r *http.Request) {
@@ -208,17 +163,7 @@ func (h *Handler) handleAdminEngines(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	matchupCounts, err := h.store.EngineMatchupCounts(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	matchups, err := h.store.ListMatchups(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	view := buildAdminView(cfg, engines, matchups, nil, gameCounts, matchupCounts)
+	view := buildAdminView(cfg, engines, nil, gameCounts)
 	view.Page = "engines"
 	view.EngineBinaries = engineBinaries
 	_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
@@ -243,18 +188,12 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	matchupCounts, err := h.store.EngineMatchupCounts(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 
 	parsed, view, ok := parseEnginesFromForm(r, currentByID)
 	if !ok {
 		for i := range view.Engines {
 			id := view.Engines[i].ID
 			view.Engines[i].Games = gameCounts[id]
-			view.Engines[i].Matchups = matchupCounts[id]
 		}
 		view.Page = "engines"
 		if bins, err := listEngineBinaries(h.enginesDir); err == nil {
@@ -265,7 +204,7 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 	}
 
 	if errMap := testEngines(r.Context(), parsed); len(errMap) > 0 {
-		view.Engines = buildEngineViewsFromList(parsed, errMap, gameCounts, matchupCounts)
+		view.Engines = buildEngineViewsFromList(parsed, errMap, gameCounts)
 		view.Page = "engines"
 		if bins, err := listEngineBinaries(h.enginesDir); err == nil {
 			view.EngineBinaries = bins
@@ -274,12 +213,14 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	seen := make(map[int64]bool)
+	addedNew := false
 	for _, e := range parsed {
 		if e.ID == 0 {
 			if _, err := h.store.InsertEngine(r.Context(), e); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+			addedNew = true
 			continue
 		}
 		seen[e.ID] = true
@@ -287,6 +228,9 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+	}
+	if addedNew {
+		_ = h.store.ClearGameQueue(r.Context())
 	}
 
 	errByID := make(map[int64]string)
@@ -296,10 +240,6 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 		}
 		if gameCounts[e.ID] > 0 {
 			errByID[e.ID] = "engine used by games"
-			continue
-		}
-		if matchupCounts[e.ID] > 0 {
-			errByID[e.ID] = "engine used by matchups"
 			continue
 		}
 		if err := h.store.DeleteEngine(r.Context(), e.ID); err != nil {
@@ -312,17 +252,12 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		matchups, err := h.store.ListMatchups(r.Context())
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
 		cfg, err := h.store.GetSettings(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		view = buildAdminView(cfg, fresh, matchups, errByID, gameCounts, matchupCounts)
+		view = buildAdminView(cfg, fresh, errByID, gameCounts)
 		view.Page = "engines"
 		if bins, err := listEngineBinaries(h.enginesDir); err == nil {
 			view.EngineBinaries = bins
@@ -349,10 +284,7 @@ func (h *Handler) handleAdminEnginePrune(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if _, err := h.store.DeleteMatchupsByEngine(r.Context(), engineID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	_ = h.store.ClearGameQueue(r.Context())
 	http.Redirect(w, r, "/admin/engines", http.StatusSeeOther)
 }
 
@@ -388,6 +320,7 @@ func (h *Handler) handleAdminEngineDuplicate(w http.ResponseWriter, r *http.Requ
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	_ = h.store.ClearGameQueue(r.Context())
 	http.Redirect(w, r, "/admin/engines", http.StatusSeeOther)
 }
 
@@ -435,51 +368,39 @@ func (h *Handler) handleAdminEngineAddExternal(w http.ResponseWriter, r *http.Re
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	_ = h.store.ClearGameQueue(r.Context())
 	http.Redirect(w, r, "/admin/engines", http.StatusSeeOther)
 }
 
 type EngineView struct {
-	ID       int64
-	Index    int
-	Name     string
-	Path     string
-	Args     string
-	Init     string
-	Error    string
-	Games    int
-	Matchups int
-}
-
-type PairView struct {
-	Index   int
-	AID     int64
-	BID     int64
-	AName   string
-	BName   string
-	Label   string
-	Enabled bool
+	ID    int64
+	Index int
+	Name  string
+	Path  string
+	Args  string
+	Init  string
+	Error string
+	Games int
 }
 
 type AdminView struct {
 	Cfg            db.Settings
 	Engines        []EngineView
-	Pairs          []PairView
 	Page           string
 	EngineBinaries []string
 }
 
-func buildAdminView(cfg db.Settings, engines []db.Engine, matchups []db.Matchup, errByID map[int64]string, gameCounts map[int64]int, matchupCounts map[int64]int) AdminView {
+func buildAdminView(cfg db.Settings, engines []db.Engine, errByID map[int64]string, gameCounts map[int64]int) AdminView {
 	views := make([]EngineView, 0, len(engines))
 	for i, e := range engines {
 		view := EngineView{
-			ID:       e.ID,
-			Index:    i,
-			Name:     e.Name,
-			Path:     e.Path,
-			Args:     e.Args,
-			Init:     e.Init,
-			Games:    gameCounts[e.ID],
-			Matchups: matchupCounts[e.ID],
+			ID:    e.ID,
+			Index: i,
+			Name:  e.Name,
+			Path:  e.Path,
+			Args:  e.Args,
+			Init:  e.Init,
+			Games: gameCounts[e.ID],
 		}
 		if errByID != nil {
 			view.Error = errByID[e.ID]
@@ -487,55 +408,7 @@ func buildAdminView(cfg db.Settings, engines []db.Engine, matchups []db.Matchup,
 		views = append(views, view)
 	}
 
-	nameByID := make(map[int64]string)
-	for _, e := range engines {
-		nameByID[e.ID] = e.Name
-	}
-
-	enabled := make(map[[2]int64]bool)
-	for _, p := range matchups {
-		a, b := p.PlayerAID, p.PlayerBID
-		if a == 0 || b == 0 {
-			continue
-		}
-		if a > b {
-			a, b = b, a
-		}
-		enabled[[2]int64{a, b}] = true
-	}
-
-	pairs := make([]PairView, 0)
-	for i := 0; i < len(engines); i++ {
-		for j := i; j < len(engines); j++ {
-			aID := engines[i].ID
-			bID := engines[j].ID
-			aName := nameByID[aID]
-			bName := nameByID[bID]
-			if aID == 0 || bID == 0 {
-				continue
-			}
-			label := aName
-			if aID == bID {
-				label = fmt.Sprintf("%s (selfplay)", aName)
-			} else {
-				label = fmt.Sprintf("%s vs %s", aName, bName)
-			}
-			key := [2]int64{minInt(aID, bID), maxInt(aID, bID)}
-			pairs = append(pairs, PairView{
-				AID:     aID,
-				BID:     bID,
-				AName:   aName,
-				BName:   bName,
-				Label:   label,
-				Enabled: enabled[key],
-			})
-		}
-	}
-	for i := range pairs {
-		pairs[i].Index = i
-	}
-
-	return AdminView{Cfg: cfg, Engines: views, Pairs: pairs}
+	return AdminView{Cfg: cfg, Engines: views}
 }
 
 func parseEnginesFromForm(r *http.Request, existing map[int64]db.Engine) ([]db.Engine, AdminView, bool) {
@@ -664,106 +537,17 @@ func (h *Handler) uniqueEngineName(ctx context.Context, base string) (string, er
 	return fmt.Sprintf("%s (%d)", name, time.Now().Unix()), nil
 }
 
-func parsePairsFromForm(r *http.Request) []db.Matchup {
-	count, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("pair_count")))
-	if count < 0 {
-		count = 0
-	}
-	seen := make(map[[2]int64]bool)
-	pairs := make([]db.Matchup, 0, count)
-	for i := 0; i < count; i++ {
-		aStr := strings.TrimSpace(r.Form.Get(fmt.Sprintf("pair_a_%d", i)))
-		bStr := strings.TrimSpace(r.Form.Get(fmt.Sprintf("pair_b_%d", i)))
-		aID, _ := strconv.ParseInt(aStr, 10, 64)
-		bID, _ := strconv.ParseInt(bStr, 10, 64)
-		if aID == 0 || bID == 0 {
-			continue
-		}
-		enabled := r.Form.Get(fmt.Sprintf("pair_enabled_%d", i)) == "on"
-		if !enabled {
-			continue
-		}
-		key := [2]int64{minInt(aID, bID), maxInt(aID, bID)}
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		pairs = append(pairs, db.Matchup{PlayerAID: key[0], PlayerBID: key[1]})
-	}
-	return pairs
-}
-
-func minString(a, b string) string {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxString(a, b string) string {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-type EngineHeader struct {
-	ID   int64
-	Name string
-}
-
-func buildEngineHeaders(engines []db.Engine) []EngineHeader {
-	headers := make([]EngineHeader, 0, len(engines))
-	for _, e := range engines {
-		headers = append(headers, EngineHeader{ID: e.ID, Name: e.Name})
-	}
-	return headers
-}
-
-func orderEngines(engines []db.Engine, order []string) []db.Engine {
-	byName := make(map[string]db.Engine)
-	for _, e := range engines {
-		byName[e.Name] = e
-	}
-	ordered := make([]db.Engine, 0, len(engines))
-	seen := make(map[string]bool)
-	for _, name := range order {
-		if e, ok := byName[name]; ok {
-			ordered = append(ordered, e)
-			seen[name] = true
-		}
-	}
-	for _, e := range engines {
-		if !seen[e.Name] {
-			ordered = append(ordered, e)
-		}
-	}
-	return ordered
-}
-
-func orderEnginesByElo(engines []db.Engine) []db.Engine {
-	ordered := append([]db.Engine(nil), engines...)
-	sort.Slice(ordered, func(i, j int) bool {
-		if ordered[i].Elo == ordered[j].Elo {
-			return ordered[i].Name < ordered[j].Name
-		}
-		return ordered[i].Elo > ordered[j].Elo
-	})
-	return ordered
-}
-
-func buildEngineViewsFromList(engines []db.Engine, errByIndex map[int]string, gameCounts map[int64]int, matchupCounts map[int64]int) []EngineView {
+func buildEngineViewsFromList(engines []db.Engine, errByIndex map[int]string, gameCounts map[int64]int) []EngineView {
 	views := make([]EngineView, 0, len(engines))
 	for i, e := range engines {
 		view := EngineView{
-			ID:       e.ID,
-			Index:    i,
-			Name:     e.Name,
-			Path:     e.Path,
-			Args:     e.Args,
-			Init:     e.Init,
-			Games:    gameCounts[e.ID],
-			Matchups: matchupCounts[e.ID],
+			ID:    e.ID,
+			Index: i,
+			Name:  e.Name,
+			Path:  e.Path,
+			Args:  e.Args,
+			Init:  e.Init,
+			Games: gameCounts[e.ID],
 		}
 		if errByIndex != nil {
 			view.Error = errByIndex[i]
@@ -771,28 +555,6 @@ func buildEngineViewsFromList(engines []db.Engine, errByIndex map[int]string, ga
 		views = append(views, view)
 	}
 	return views
-}
-
-func minInt(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxInt(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-type MatchCell struct {
-	Index   int
-	AID     int64
-	BID     int64
-	Label   string
-	Enabled bool
 }
 
 func listBookOptions(dir string) ([]string, error) {
@@ -813,152 +575,6 @@ func listBookOptions(dir string) ([]string, error) {
 	}
 	sort.Strings(options)
 	return options, nil
-}
-
-type MatchRow struct {
-	EngineID   int64
-	EngineName string
-	Cells      []MatchCell
-}
-
-func engineNames(engines []db.Engine) []string {
-	out := make([]string, 0, len(engines))
-	for _, e := range engines {
-		if e.Name == "" {
-			continue
-		}
-		out = append(out, e.Name)
-	}
-	return out
-}
-
-func buildMatchRows(engines []db.Engine, matchups []db.Matchup) []MatchRow {
-	if len(engines) == 0 {
-		return nil
-	}
-	enabled := make(map[[2]int64]bool)
-	for _, p := range matchups {
-		a, b := p.PlayerAID, p.PlayerBID
-		if a == 0 || b == 0 {
-			continue
-		}
-		if a > b {
-			a, b = b, a
-		}
-		enabled[[2]int64{a, b}] = true
-	}
-	rows := make([]MatchRow, 0, len(engines))
-	index := 0
-	for i, rowEng := range engines {
-		row := MatchRow{EngineID: rowEng.ID, EngineName: rowEng.Name}
-		for j := 0; j < len(engines); j++ {
-			colEng := engines[j]
-			label := rowEng.Name
-			if rowEng.ID == colEng.ID {
-				label = fmt.Sprintf("%s (selfplay)", rowEng.Name)
-			} else {
-				label = fmt.Sprintf("%s vs %s", rowEng.Name, colEng.Name)
-			}
-			key := [2]int64{minInt(rowEng.ID, colEng.ID), maxInt(rowEng.ID, colEng.ID)}
-			row.Cells = append(row.Cells, MatchCell{
-				Index:   index,
-				AID:     rowEng.ID,
-				BID:     colEng.ID,
-				Label:   label,
-				Enabled: enabled[key],
-			})
-			index++
-		}
-		if i < len(engines) {
-			rows = append(rows, row)
-		}
-	}
-	return rows
-}
-
-func matchCellCount(rows []MatchRow) int {
-	count := 0
-	for _, row := range rows {
-		count += len(row.Cells)
-	}
-	return count
-}
-
-func buildNeighborMatchups(engines []db.Engine, radius int) []db.Matchup {
-	if radius < 1 || len(engines) == 0 {
-		return nil
-	}
-	pairs := make(map[[2]int64]bool)
-	for i, engine := range engines {
-		if engine.ID == 0 {
-			continue
-		}
-		start := i - radius
-		if start < 0 {
-			start = 0
-		}
-		end := i + radius
-		if end >= len(engines) {
-			end = len(engines) - 1
-		}
-		for j := start; j <= end; j++ {
-			if i == j {
-				continue
-			}
-			other := engines[j]
-			if other.ID == 0 {
-				continue
-			}
-			a := minInt(engine.ID, other.ID)
-			b := maxInt(engine.ID, other.ID)
-			pairs[[2]int64{a, b}] = true
-		}
-	}
-	out := make([]db.Matchup, 0, len(pairs))
-	for key := range pairs {
-		out = append(out, db.Matchup{PlayerAID: key[0], PlayerBID: key[1]})
-	}
-	return out
-}
-
-func matchOrder(engines []db.Engine, ranking []RankingRow) []string {
-	order := engineNames(engines)
-	if len(order) == 0 {
-		return order
-	}
-	if len(ranking) == 0 {
-		return order
-	}
-	allowed := make(map[string]bool)
-	for _, name := range order {
-		allowed[name] = true
-	}
-	ranked := make([]string, 0, len(ranking))
-	seen := make(map[string]bool)
-	for _, r := range ranking {
-		if !allowed[r.Name] {
-			continue
-		}
-		ranked = append(ranked, r.Name)
-		seen[r.Name] = true
-	}
-	for _, name := range order {
-		if !seen[name] {
-			ranked = append(ranked, name)
-		}
-	}
-	return ranked
-}
-
-func mapEngineElos(engines []db.Engine) map[string]float64 {
-	elos := make(map[string]float64)
-	for _, e := range engines {
-		if e.Name == "" {
-			continue
-		}
-		elos[e.Name] = e.Elo
-	}
-	return elos
 }
 
 func testEngines(ctx context.Context, engines []db.Engine) map[int]string {

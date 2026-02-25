@@ -21,38 +21,12 @@
             <h1>Live View</h1>
             <div id="live" class="card" data-url="/live/fragment">Loading…</div>
 
-            <div class="card" style="margin-top: 16px;">
-                <h2>Recent games</h2>
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Played</th>
-                            <th>White</th>
-                            <th>Black</th>
-                            <th>Result</th>
-                            <th>Termination</th>
-                            <th>Length (plies)</th>
-                            <th>Movetime</th>
-                            <th>View</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {{range .RecentGames}}
-                        <tr>
-                            <td>{{.ID}}</td>
-                            <td class="mono">{{.PlayedAt}}</td>
-                            <td>{{.White}}</td>
-                            <td>{{.Black}}</td>
-                            <td>{{.Result}}</td>
-                            <td>{{.Termination}}</td>
-                            <td>{{.Plies}}</td>
-                            <td>{{.MovetimeMS}} ms</td>
-                            <td><a href="/games/view?id={{.ID}}">open</a></td>
-                        </tr>
-                        {{end}}
-                    </tbody>
-                </table>
+            <div id="queue" class="card" data-url="/live/queue" style="margin-top: 16px;">
+                {{template "queue_fragment.html" .}}
+            </div>
+
+            <div id="recent_games" class="card" data-url="/live/recent" style="margin-top: 16px;">
+                {{template "recent_games_fragment.html" .}}
             </div>
         </main>
     </div>
@@ -65,11 +39,29 @@
             el.innerHTML = await res.text();
         }
 
+        async function refreshQueue() {
+            const el = document.getElementById('queue');
+            const url = el.getAttribute('data-url');
+            const res = await fetch(url, { cache: 'no-store' });
+            el.innerHTML = await res.text();
+        }
+
+        async function refreshRecentGames() {
+            const el = document.getElementById('recent_games');
+            const url = el.getAttribute('data-url');
+            const res = await fetch(url, { cache: 'no-store' });
+            el.innerHTML = await res.text();
+        }
+
         refreshLive();
+        refreshQueue();
+        refreshRecentGames();
 
         const es = new EventSource('/api/live/events');
         es.addEventListener('update', () => {
             refreshLive();
+            refreshQueue();
+            refreshRecentGames();
         });
     </script>
 </body>

@@ -1,16 +1,10 @@
 package engine
 
 import (
-	"fmt"
 	"strings"
 
 	"tethys/internal/db"
 )
-
-type matchupCandidate struct {
-	WhiteID int64
-	BlackID int64
-}
 
 type ColorAssignment struct {
 	White       db.Engine
@@ -20,88 +14,76 @@ type ColorAssignment struct {
 	BookPath    string
 }
 
-func selectAssignment(movetimeMS int, bookPath string, engines []db.Engine, matchups []db.Matchup, counts []db.MatchupCount, pickIdx int) (ColorAssignment, int) {
-	assign := ColorAssignment{
-		MovetimeMS:  movetimeMS,
-		BookPath:    bookPath,
-		BookEnabled: strings.TrimSpace(bookPath) != "",
-	}
-	if assign.MovetimeMS <= 0 {
-		assign.MovetimeMS = 100
+type matchupPair struct {
+	AID int64
+	BID int64
+}
+
+func buildNeighborPairs(engines []db.Engine, radius int) []matchupPair {
+	if radius < 1 {
+		return nil
 	}
 
-	engineByID := make(map[int64]db.Engine)
+	eligible := make([]db.Engine, 0, len(engines))
 	for _, e := range engines {
 		if e.ID == 0 || e.Name == "" || e.Path == "" {
 			continue
 		}
-		engineByID[e.ID] = e
+		eligible = append(eligible, e)
+	}
+	if len(eligible) < 2 {
+		return nil
 	}
 
-	validPairs := make([]db.Matchup, 0, len(matchups))
-	for _, p := range matchups {
-		if p.PlayerAID == 0 || p.PlayerBID == 0 {
-			continue
+	pairs := make(map[[2]int64]bool)
+	for i, engine := range eligible {
+		start := i - radius
+		if start < 0 {
+			start = 0
 		}
-		if _, ok := engineByID[p.PlayerAID]; !ok {
-			continue
+		end := i + radius
+		if end >= len(eligible) {
+			end = len(eligible) - 1
 		}
-		if _, ok := engineByID[p.PlayerBID]; !ok {
-			continue
-		}
-		validPairs = append(validPairs, p)
-	}
-
-	if len(validPairs) == 0 {
-		return assign, 0
-	}
-
-	countMap := make(map[string]int)
-	for _, c := range counts {
-		key := fmt.Sprintf("%d\x00%d", c.WhiteID, c.BlackID)
-		countMap[key] = c.Count
-	}
-
-	candidates := make([]matchupCandidate, 0, len(validPairs)*2)
-	for _, p := range validPairs {
-		if p.PlayerAID == p.PlayerBID {
-			candidates = append(candidates, matchupCandidate{WhiteID: p.PlayerAID, BlackID: p.PlayerAID})
-			continue
-		}
-		candidates = append(candidates, matchupCandidate{WhiteID: p.PlayerAID, BlackID: p.PlayerBID})
-		candidates = append(candidates, matchupCandidate{WhiteID: p.PlayerBID, BlackID: p.PlayerAID})
-	}
-
-	minCount := -1
-	for _, c := range candidates {
-		key := fmt.Sprintf("%d\x00%d", c.WhiteID, c.BlackID)
-		count := countMap[key]
-		if minCount == -1 || count < minCount {
-			minCount = count
+		for j := start; j <= end; j++ {
+			if i == j {
+				continue
+			}
+			other := eligible[j]
+			a := engine.ID
+			b := other.ID
+			if a > b {
+				a, b = b, a
+			}
+			pairs[[2]int64{a, b}] = true
 		}
 	}
 
-	filtered := make([]matchupCandidate, 0, len(candidates))
-	for _, c := range candidates {
-		key := fmt.Sprintf("%d\x00%d", c.WhiteID, c.BlackID)
-		if countMap[key] == minCount {
-			filtered = append(filtered, c)
-		}
+	out := make([]matchupPair, 0, len(pairs))
+	for key := range pairs {
+		out = append(out, matchupPair{AID: key[0], BID: key[1]})
 	}
-	if len(filtered) == 0 {
-		filtered = candidates
+	return out
+}
+
+func assignmentFromQueue(entry db.GameQueueEntry, enginesByID map[int64]db.Engine) (ColorAssignment, bool) {
+	white, ok := enginesByID[entry.WhiteID]
+	if !ok {
+		return ColorAssignment{}, false
 	}
-
-	idx := pickIdx
-	if idx < 0 || idx >= len(filtered) {
-		idx = 0
+	black, ok := enginesByID[entry.BlackID]
+	if !ok {
+		return ColorAssignment{}, false
 	}
-	chosen := filtered[idx]
-
-	white := engineByID[chosen.WhiteID]
-	black := engineByID[chosen.BlackID]
-	assign.White, assign.Black = white, black
-
-	nextIdx := (idx + 1) % len(filtered)
-	return assign, nextIdx
+	assign := ColorAssignment{
+		White:      white,
+		Black:      black,
+		MovetimeMS: entry.MovetimeMS,
+		BookPath:   entry.BookPath,
+	}
+	if assign.MovetimeMS <= 0 {
+		assign.MovetimeMS = 100
+	}
+	assign.BookEnabled = strings.TrimSpace(assign.BookPath) != ""
+	return assign, true
 }

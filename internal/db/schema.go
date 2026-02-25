@@ -24,12 +24,7 @@ var schema_stmts = []string{
 		engine_elo REAL NOT NULL DEFAULT 0,
 		UNIQUE(name)
 	);`,
-	`CREATE TABLE IF NOT EXISTS matchups (
-		id INTEGER PRIMARY KEY,
-		player_a_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
-		player_b_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
-		UNIQUE(player_a_id, player_b_id)
-	);`,
+	`DROP TABLE IF EXISTS matchups;`,
 	`CREATE TABLE IF NOT EXISTS games (
 		id INTEGER PRIMARY KEY,
 		played_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -44,6 +39,14 @@ var schema_stmts = []string{
 		book_plies INTEGER NOT NULL DEFAULT 0
 		CHECK (result IN ('', '1-0', '0-1', '1/2-1/2'))
 		CHECK (trim(moves_uci) = moves_uci)
+	);`,
+	`CREATE TABLE IF NOT EXISTS game_queue (
+		id INTEGER PRIMARY KEY,
+		created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+		white_player_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+		black_player_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+		movetime_ms INTEGER NOT NULL DEFAULT 0,
+		book_path TEXT NOT NULL DEFAULT ''
 	);`,
 	`CREATE TABLE IF NOT EXISTS evals (
 		zobrist_key INTEGER PRIMARY KEY,
@@ -74,8 +77,7 @@ var schema_stmts = []string{
 	`CREATE INDEX IF NOT EXISTS idx_games_matchup ON games(white_player_id, black_player_id);`,
 	`CREATE INDEX IF NOT EXISTS idx_evals_engine_id ON evals(engine_id);`,
 	`CREATE INDEX IF NOT EXISTS idx_engine_logs_game_ply ON engine_logs(game_id, ply);`,
-	`CREATE INDEX IF NOT EXISTS idx_matchups_player_a_id ON matchups(player_a_id);`,
-	`CREATE INDEX IF NOT EXISTS idx_matchups_player_b_id ON matchups(player_b_id);`,
+	`CREATE INDEX IF NOT EXISTS idx_game_queue_created_at ON game_queue(created_at);`,
 }
 
 type Store struct {

@@ -59,13 +59,12 @@
                                         <button type="submit" class="duplicate-engine"
                                             formaction="/admin/engines/duplicate" formmethod="post" name="engine_id"
                                             value="{{.ID}}">Duplicate</button>
-                                        <button type="button" class="delete-engine" {{if or (gt .Games 0) (gt .Matchups
-                                            0)}}disabled{{end}}>
+                                        <button type="button" class="delete-engine" {{if gt .Games 0}}disabled{{end}}>
                                             Delete
                                         </button>
                                         <button type="submit" class="danger" formaction="/admin/engines/prune"
                                             formmethod="post" name="engine_id" value="{{.ID}}">
-                                            Delete games/matchups
+                                            Delete games
                                         </button>
                                     </div>
 
@@ -86,7 +85,6 @@
 
                             <div class="engine-meta">
                                 <span class="hint">{{.Games}} games</span>
-                                <span class="hint">{{.Matchups}}matchups</span>
                                 <span class="hint">Path:{{.Path}}</span>
                                 {{if .Error}}<span class="error">{{.Error}}</span>{{end}}
                             </div>

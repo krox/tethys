@@ -38,94 +38,19 @@
                     </select>
                     <div class="row">
                         <button type="submit">Save</button>
-                        <button type="submit" formaction="/admin/matches/autoset" formmethod="post">
-                            Auto-set matchups
-                        </button>
                     </div>
                 </form>
             </div>
 
             <div class="card">
-                <form method="post" action="/admin/matches" class="form">
-                    <input type="hidden" name="pair_count" value="{{.PairCount}}" />
-                    <table class="table matrix-table">
-                        <thead>
-                            <tr>
-                                <th>Engine</th>
-                                <th class="matrix-head strength-head">Elo</th>
-                                {{range .Engines}}
-                                <th class="matrix-head matrix-head-col"><span class="matrix-head-text">{{.Name}}</span>
-                                </th>
-                                {{end}}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {{range .Rows}}
-                            <tr>
-                                <th class="matrix-head">{{.EngineName}}</th>
-                                <td class="matrix-cell strength-cell">
-                                    {{with (index $.Strengths .EngineName)}}{{if gt . 0.0}}{{printf "%.0f"
-                                    .}}{{else}}—{{end}}{{else}}—{{end}}
-                                </td>
-                                {{range .Cells}}
-                                <td class="matrix-cell" data-a="{{.AID}}" data-b="{{.BID}}">
-                                    <input type="hidden" name="pair_a_{{.Index}}" value="{{.AID}}" />
-                                    <input type="hidden" name="pair_b_{{.Index}}" value="{{.BID}}" />
-                                    <label class="matrix-label" title="{{.Label}}">
-                                        <input type="checkbox" name="pair_enabled_{{.Index}}" {{if
-                                            .Enabled}}checked{{end}} />
-                                    </label>
-                                </td>
-                                {{end}}
-                            </tr>
-                            {{end}}
-                        </tbody>
-                    </table>
-                    <div class="row">
-                        <button type="submit">Save</button>
-                    </div>
-                </form>
+                <h2>Matchmaking Policy</h2>
+                <p class="hint">Matchups are scheduled automatically. Each engine plays the two higher and two lower
+                    neighbors in the Elo ranking, with both colors, and no mirror matches.</p>
+                <p class="hint">When the game queue is empty, Elo ratings are recomputed and new games are scheduled to
+                    keep active matchups balanced.</p>
             </div>
         </main>
     </div>
-
-    <script>
-        (function () {
-            const cells = Array.from(document.querySelectorAll('.matrix-cell'));
-            const byKey = new Map();
-
-            function keyFor(a, b) {
-                const aNum = Number(a);
-                const bNum = Number(b);
-                return aNum < bNum ? `${a}::${b}` : `${b}::${a}`;
-            }
-
-            cells.forEach((cell) => {
-                const a = cell.dataset.a || '';
-                const b = cell.dataset.b || '';
-                const key = keyFor(a, b);
-                if (!byKey.has(key)) byKey.set(key, []);
-                byKey.get(key).push(cell);
-            });
-
-            cells.forEach((cell) => {
-                const checkbox = cell.querySelector('input[type="checkbox"]');
-                if (!checkbox) return;
-                checkbox.addEventListener('change', () => {
-                    const a = cell.dataset.a || '';
-                    const b = cell.dataset.b || '';
-                    const key = keyFor(a, b);
-                    const group = byKey.get(key) || [];
-                    group.forEach((other) => {
-                        const otherBox = other.querySelector('input[type="checkbox"]');
-                        if (otherBox && otherBox.checked !== checkbox.checked) {
-                            otherBox.checked = checkbox.checked;
-                        }
-                    });
-                });
-            });
-        })();
-    </script>
 </body>
 
 </html>

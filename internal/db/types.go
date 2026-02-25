@@ -40,12 +40,6 @@ type Engine struct {
 	Elo  float64 `db:"engine_elo"`
 }
 
-type Matchup struct {
-	ID        int64 `db:"id"`
-	PlayerAID int64 `db:"player_a_id"`
-	PlayerBID int64 `db:"player_b_id"`
-}
-
 type GameSearchFilter struct {
 	EngineID    int64
 	WhiteID     int64
@@ -59,6 +53,26 @@ type GameSearchFilter struct {
 type GameMovesRow struct {
 	MovesUCI string `db:"moves_uci"`
 	Result   string `db:"result"`
+}
+
+type GameQueueEntry struct {
+	ID         int64  `db:"id"`
+	CreatedAt  string `db:"created_at"`
+	WhiteID    int64  `db:"white_player_id"`
+	BlackID    int64  `db:"black_player_id"`
+	MovetimeMS int    `db:"movetime_ms"`
+	BookPath   string `db:"book_path"`
+}
+
+type GameQueueRow struct {
+	ID         int64  `db:"id"`
+	CreatedAt  string `db:"created_at"`
+	WhiteID    int64  `db:"white_player_id"`
+	BlackID    int64  `db:"black_player_id"`
+	WhiteName  string `db:"white"`
+	BlackName  string `db:"black"`
+	MovetimeMS int    `db:"movetime_ms"`
+	BookPath   string `db:"book_path"`
 }
 
 type PairResult struct {

@@ -118,26 +118,6 @@ func (s *Store) EngineGameCounts(ctx context.Context) (map[int64]int, error) {
 	return counts, nil
 }
 
-func (s *Store) EngineMatchupCounts(ctx context.Context) (map[int64]int, error) {
-	type countRow struct {
-		ID    int64 `db:"id"`
-		Count int   `db:"count"`
-	}
-	var rows []countRow
-	if err := s.db.SelectContext(ctx, &rows, `
-		SELECT player_a_id AS id, COUNT(*) AS count FROM matchups GROUP BY player_a_id
-		UNION ALL
-		SELECT player_b_id AS id, COUNT(*) AS count FROM matchups WHERE player_b_id != player_a_id GROUP BY player_b_id
-	`); err != nil {
-		return nil, err
-	}
-	counts := make(map[int64]int)
-	for _, row := range rows {
-		counts[row.ID] += row.Count
-	}
-	return counts, nil
-}
-
 func (s *Store) DeleteGamesByEngine(ctx context.Context, engineID int64) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `
 		DELETE FROM games

@@ -13,6 +13,7 @@ import (
 
 	"tethys/internal/book"
 	"tethys/internal/db"
+	"tethys/internal/ranking"
 )
 
 type LiveState struct {
@@ -37,7 +38,6 @@ type SquareView struct {
 type Runner struct {
 	store    *db.Store
 	b        *Broadcaster
-	pickIdx  int
 	bookMu   sync.Mutex
 	bookPath string
 	bookMod  time.Time
@@ -116,25 +116,13 @@ func (r *Runner) loop(parent context.Context) {
 		func() {
 			defer cancel()
 
-			counts := []db.MatchupCount{}
 			engines := []db.Engine{}
-			matchups := []db.Matchup{}
 			settings := db.Settings{}
 			if r.store != nil {
-				if rows, err := r.store.ListMatchupCounts(ctx); err == nil {
-					counts = rows
-				} else {
-					log.Printf("runner: matchup count error: %v", err)
-				}
 				if rows, err := r.store.ListEngines(ctx); err == nil {
 					engines = rows
 				} else {
 					log.Printf("runner: engine list error: %v", err)
-				}
-				if rows, err := r.store.ListMatchups(ctx); err == nil {
-					matchups = rows
-				} else {
-					log.Printf("runner: matchup list error: %v", err)
 				}
 				if cfg, err := r.store.GetSettings(ctx); err == nil {
 					settings = cfg
@@ -142,14 +130,44 @@ func (r *Runner) loop(parent context.Context) {
 					log.Printf("runner: settings error: %v", err)
 				}
 			}
-			assignment, nextIdx := selectAssignment(settings.GameMovetimeMS, settings.GameBookPath, engines, matchups, counts, r.pickIdx)
-			r.pickIdx = nextIdx
 
-			if assignment.White.Path == "" || assignment.Black.Path == "" {
+			engineByID := make(map[int64]db.Engine)
+			for _, e := range engines {
+				if e.ID == 0 || e.Name == "" || e.Path == "" {
+					continue
+				}
+				engineByID[e.ID] = e
+			}
+
+			var assignment ColorAssignment
+			var ok bool
+			if r.store != nil {
+				if entry, hasEntry, err := r.store.DequeueGame(ctx); err != nil {
+					log.Printf("runner: dequeue game error: %v", err)
+				} else if hasEntry {
+					assignment, ok = assignmentFromQueue(entry, engineByID)
+				}
+				if !ok {
+					if err := r.fillGameQueue(ctx, settings); err != nil {
+						log.Printf("runner: fill queue error: %v", err)
+					}
+					if entry, hasEntry, err := r.store.DequeueGame(ctx); err != nil {
+						log.Printf("runner: dequeue game error: %v", err)
+					} else if hasEntry {
+						assignment, ok = assignmentFromQueue(entry, engineByID)
+					}
+				}
+			}
+
+			if !ok || assignment.White.Path == "" || assignment.Black.Path == "" {
 				start := chess.StartingPosition()
+				message := "waiting for queue"
+				if len(engineByID) < 2 {
+					message = "configure engines in /admin"
+				}
 				r.setLive(func(ls *LiveState) {
 					ls.Status = "idle"
-					ls.Result = "configure engines in /admin"
+					ls.Result = message
 					ls.FEN = start.String()
 					ls.Board = boardFromPosition(start)
 				})
@@ -407,4 +425,96 @@ func (r *Runner) recordFailedGame(ctx context.Context, assignment ColorAssignmen
 		ls.Result = result
 	})
 	r.b.Publish()
+}
+
+func (r *Runner) fillGameQueue(ctx context.Context, settings db.Settings) error {
+	if r.store == nil {
+		return nil
+	}
+
+	rows, err := r.store.ResultsByPair(ctx)
+	if err != nil {
+		return err
+	}
+	elos := ranking.ComputeBradleyTerryElos(rows, 3600)
+	if err := r.store.ReplaceEngineElos(ctx, elos); err != nil {
+		return err
+	}
+	engines, err := r.store.ListEngines(ctx)
+	if err != nil {
+		return err
+	}
+	pairs := buildNeighborPairs(engines, 2)
+	if len(pairs) == 0 {
+		return nil
+	}
+	counts, err := r.store.ListMatchupCounts(ctx)
+	if err != nil {
+		return err
+	}
+
+	type pairCount struct {
+		AID int64
+		BID int64
+		AB  int
+		BA  int
+	}
+
+	pairCounts := make(map[[2]int64]*pairCount, len(pairs))
+	for _, pair := range pairs {
+		pairCounts[[2]int64{pair.AID, pair.BID}] = &pairCount{AID: pair.AID, BID: pair.BID}
+	}
+	for _, c := range counts {
+		a := c.WhiteID
+		b := c.BlackID
+		key := [2]int64{a, b}
+		if a > b {
+			key = [2]int64{b, a}
+			a, b = b, a
+		}
+		pc, ok := pairCounts[key]
+		if !ok {
+			continue
+		}
+		if c.WhiteID == pc.AID && c.BlackID == pc.BID {
+			pc.AB += c.Count
+		} else if c.WhiteID == pc.BID && c.BlackID == pc.AID {
+			pc.BA += c.Count
+		}
+	}
+
+	minTotal := -1
+	for _, pc := range pairCounts {
+		total := pc.AB + pc.BA
+		if minTotal == -1 || total < minTotal {
+			minTotal = total
+		}
+	}
+	if minTotal < 0 {
+		return nil
+	}
+
+	entries := make([]db.GameQueueEntry, 0, len(pairCounts)*4)
+	for _, pc := range pairCounts {
+		total := pc.AB + pc.BA
+		if total != minTotal {
+			continue
+		}
+		for i := 0; i < 2; i++ {
+			entries = append(entries, db.GameQueueEntry{
+				WhiteID:    pc.AID,
+				BlackID:    pc.BID,
+				MovetimeMS: settings.GameMovetimeMS,
+				BookPath:   settings.GameBookPath,
+			})
+			entries = append(entries, db.GameQueueEntry{
+				WhiteID:    pc.BID,
+				BlackID:    pc.AID,
+				MovetimeMS: settings.GameMovetimeMS,
+				BookPath:   settings.GameBookPath,
+			})
+		}
+	}
+
+	return r.store.EnqueueGames(ctx, entries)
 }

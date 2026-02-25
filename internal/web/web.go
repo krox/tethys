@@ -49,6 +49,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /{$}", h.handleIndex)
 	mux.HandleFunc("GET /live/fragment", h.handleLiveFragment)
+	mux.HandleFunc("GET /live/queue", h.handleQueueFragment)
+	mux.HandleFunc("GET /live/recent", h.handleRecentGamesFragment)
 	mux.Handle("GET /api/live/events", engine.SSEHandler(h.b))
 	mux.HandleFunc("GET /api/live", h.handleLiveJSON)
 	mux.HandleFunc("GET /opening", h.handleOpeningPage)
@@ -72,8 +74,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/settings", h.handleAdminSettings)
 	mux.HandleFunc("POST /admin/settings", h.handleAdminSettingsSave)
 	mux.HandleFunc("GET /admin/matches", h.handleAdminMatches)
-	mux.HandleFunc("POST /admin/matches", h.handleAdminMatchesSave)
-	mux.HandleFunc("POST /admin/matches/autoset", h.handleAdminMatchesAutoSet)
 	mux.HandleFunc("GET /admin/engines", h.handleAdminEngines)
 	mux.HandleFunc("POST /admin/engines", h.handleAdminEnginesSave)
 	mux.HandleFunc("POST /admin/engines/duplicate", h.handleAdminEngineDuplicate)

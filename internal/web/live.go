@@ -17,6 +17,16 @@ func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	queueCount, err := h.store.GameQueueSize(ctx)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	queue, err := h.store.ListGameQueue(ctx, 10)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	recentGames, err := h.store.ListFinishedGames(ctx, 10)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -26,6 +36,8 @@ func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
 		"Page":        "live",
 		"GameCount":   gameCount,
 		"EngineCount": engineCount,
+		"QueueCount":  queueCount,
+		"Queue":       queue,
 		"RecentGames": recentGames,
 	})
 }
@@ -46,5 +58,35 @@ func (h *Handler) handleLiveJSON(w http.ResponseWriter, r *http.Request) {
 		"result":      live.Result,
 		"fen":         live.FEN,
 		"moves_uci":   live.MovesUCI,
+	})
+}
+
+func (h *Handler) handleQueueFragment(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	queueCount, err := h.store.GameQueueSize(ctx)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	queue, err := h.store.ListGameQueue(ctx, 10)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = h.tpl.ExecuteTemplate(w, "queue_fragment.html", map[string]any{
+		"QueueCount": queueCount,
+		"Queue":      queue,
+	})
+}
+
+func (h *Handler) handleRecentGamesFragment(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	recentGames, err := h.store.ListFinishedGames(ctx, 10)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = h.tpl.ExecuteTemplate(w, "recent_games_fragment.html", map[string]any{
+		"RecentGames": recentGames,
 	})
 }

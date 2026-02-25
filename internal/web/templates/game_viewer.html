@@ -57,7 +57,8 @@
                 <h2>Moves</h2>
                 <ol id="move_list" class="moves-list">
                     {{range .Moves}}
-                    <li data-index="{{.Index}}" data-log="{{.Log}}" data-side="{{.Side}}" data-elapsed="{{.ElapsedMS}}">{{.SAN}}</li>
+                    <li data-index="{{.Index}}" data-log="{{.Log}}" data-side="{{.Side}}" data-elapsed="{{.ElapsedMS}}">
+                        {{.SAN}}</li>
                     {{end}}
                 </ol>
             </div>
