@@ -1,0 +1,28 @@
+<h2>Game queue</h2>
+<p class="hint">{{.QueueCount}} scheduled</p>
+{{if .Queue}}
+<table class="table">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>White</th>
+            <th>Black</th>
+            <th>Movetime</th>
+            <th>Book</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Queue}}
+        <tr>
+            <td>{{.ID}}</td>
+            <td>{{.WhiteName}}</td>
+            <td>{{.BlackName}}</td>
+            <td>{{.MovetimeMS}} ms</td>
+            <td>{{if .BookPath}}{{.BookPath}}{{else}}(none){{end}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{else}}
+<p class="hint">Queue is empty.</p>
+{{end}}
