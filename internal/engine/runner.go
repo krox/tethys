@@ -321,21 +321,24 @@ func (r *Runner) loop(parent context.Context) {
 				if moveTimeoutMS <= 0 {
 					moveTimeoutMS = 100
 				}
-				moveTimeoutMS += moveTimeoutMS / 5
-				moveCtx, cancelMove := context.WithTimeout(ctx, time.Duration(moveTimeoutMS)*time.Millisecond)
-				best, logLines, err := eng.BestMoveMovetime(moveCtx, movesUCI, assignment.MovetimeMS)
-				cancelMove()
-				if len(logLines) > 0 {
-					engineID := assignment.White.ID
-					if !isWhiteToMove {
-						engineID = assignment.Black.ID
-					}
-					engineLogs = append(engineLogs, db.EngineLog{
-						Ply:      ply,
-						EngineID: engineID,
-						Log:      strings.Join(logLines, "\n"),
-					})
+				if settings.GameSlackMS > 0 {
+					moveTimeoutMS += settings.GameSlackMS
 				}
+				moveCtx, cancelMove := context.WithTimeout(ctx, time.Duration(moveTimeoutMS)*time.Millisecond)
+				start := time.Now()
+				best, logLines, err := eng.BestMoveMovetime(moveCtx, movesUCI, assignment.MovetimeMS)
+				elapsedMS := time.Since(start).Milliseconds()
+				cancelMove()
+				engineID := assignment.White.ID
+				if !isWhiteToMove {
+					engineID = assignment.Black.ID
+				}
+				engineLogs = append(engineLogs, db.EngineLog{
+					Ply:       ply,
+					EngineID:  engineID,
+					ElapsedMS: elapsedMS,
+					Log:       strings.Join(logLines, "\n"),
+				})
 				if err != nil {
 					if errors.Is(err, context.Canceled) {
 						r.failGame(ctx, "*", "service stopping")

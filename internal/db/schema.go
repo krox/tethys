@@ -57,6 +57,7 @@ var schema_stmts = []string{
 		game_id INTEGER NOT NULL REFERENCES games(id) ON UPDATE CASCADE ON DELETE CASCADE,
 		ply INTEGER NOT NULL,
 		engine_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+		elapsed_ms INTEGER NOT NULL DEFAULT 0,
 		log TEXT NOT NULL,
 		PRIMARY KEY (game_id, ply, engine_id)
 	);`,
@@ -101,6 +102,7 @@ func Open(path string) (*Store, error) {
 	for _, stmt := range schema_stmts {
 		db.MustExec(stmt)
 	}
+	ensureEngineLogColumns(db)
 	insertDefaultSettings(db)
 
 	return &Store{db: db}, nil
@@ -115,5 +117,28 @@ func insertDefaultSettings(db *sqlx.DB) {
 	db.MustExec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('analysis_engine_id', 0)`)
 	db.MustExec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('analysis_depth', 12)`)
 	db.MustExec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('game_movetime_ms', 100)`)
+	db.MustExec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('game_slack_ms', 100)`)
 	db.MustExec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('game_book_path', '')`)
+}
+
+func ensureEngineLogColumns(db *sqlx.DB) {
+	if !tableHasColumn(db, "engine_logs", "elapsed_ms") {
+		db.MustExec(`ALTER TABLE engine_logs ADD COLUMN elapsed_ms INTEGER NOT NULL DEFAULT 0`)
+	}
+}
+
+func tableHasColumn(db *sqlx.DB, table, column string) bool {
+	var cols []struct {
+		Name string `db:"name"`
+	}
+	query := fmt.Sprintf("SELECT name FROM pragma_table_info('%s')", table)
+	if err := db.Select(&cols, query); err != nil {
+		return false
+	}
+	for _, col := range cols {
+		if col.Name == column {
+			return true
+		}
+	}
+	return false
 }

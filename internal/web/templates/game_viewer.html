@@ -57,7 +57,7 @@
                 <h2>Moves</h2>
                 <ol id="move_list" class="moves-list">
                     {{range .Moves}}
-                    <li data-index="{{.Index}}" data-log="{{.Log}}" data-side="{{.Side}}">{{.SAN}}</li>
+                    <li data-index="{{.Index}}" data-log="{{.Log}}" data-side="{{.Side}}" data-elapsed="{{.ElapsedMS}}">{{.SAN}}</li>
                     {{end}}
                 </ol>
             </div>
@@ -65,6 +65,7 @@
             <div class="card" style="margin-top: 16px;">
                 <h2>Engine Log</h2>
                 <div class="hint" id="engine_log_side"></div>
+                <div class="hint" id="engine_log_elapsed"></div>
                 <pre class="mono" id="engine_log">No log for this ply.</pre>
             </div>
         </main>
@@ -80,14 +81,25 @@
             const analyzeLink = document.getElementById('analyze_position');
             const logView = document.getElementById('engine_log');
             const logSide = document.getElementById('engine_log_side');
+            const logElapsed = document.getElementById('engine_log_elapsed');
             let idx = 0;
+            const maxFrameIndex = frames.reduce((max, f) => {
+                const val = Number(f.dataset.index || 0);
+                return val > max ? val : max;
+            }, 0);
+            const maxMoveIndex = moves.reduce((max, m) => {
+                const val = Number(m.dataset.index || 0);
+                return val > max ? val : max;
+            }, 0);
+            const maxIndex = Math.max(maxFrameIndex, maxMoveIndex);
 
             function setActive(index) {
-                idx = Math.max(0, Math.min(index, frames.length - 1));
-                frames.forEach((f) => f.classList.toggle('active', Number(f.dataset.index) === idx));
+                idx = Math.max(0, Math.min(index, maxIndex));
+                const frameIndex = Math.min(idx, maxFrameIndex);
+                frames.forEach((f) => f.classList.toggle('active', Number(f.dataset.index) === frameIndex));
                 moves.forEach((m) => m.classList.toggle('active', Number(m.dataset.index) === idx));
-                idxLabel.textContent = `${idx}/${frames.length - 1}`;
-                const frame = frames.find((f) => Number(f.dataset.index) === idx);
+                idxLabel.textContent = `${idx}/${maxIndex}`;
+                const frame = frames.find((f) => Number(f.dataset.index) === frameIndex);
                 if (frame && analyzeLink) {
                     const fen = frame.dataset.fen || '';
                     analyzeLink.href = fen ? `/positions/view?fen=${encodeURIComponent(fen)}` : '/positions/view';
@@ -96,9 +108,13 @@
                     const move = moves.find((m) => Number(m.dataset.index) === idx);
                     const log = move ? (move.dataset.log || '') : '';
                     const side = move ? (move.dataset.side || '') : '';
+                    const elapsed = move ? (move.dataset.elapsed || '') : '';
                     logView.textContent = log.trim() === '' ? 'No log for this ply.' : log;
                     if (logSide) {
                         logSide.textContent = side ? `${side} to move` : '';
+                    }
+                    if (logElapsed) {
+                        logElapsed.textContent = elapsed && elapsed !== '0' ? `Elapsed: ${elapsed} ms` : '';
                     }
                 }
             }

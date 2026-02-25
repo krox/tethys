@@ -5,6 +5,7 @@ type Settings struct {
 	AnalysisEngineID int64  `db:"analysis_engine_id"`
 	AnalysisDepth    int    `db:"analysis_depth"`
 	GameMovetimeMS   int    `db:"game_movetime_ms"`
+	GameSlackMS      int    `db:"game_slack_ms"`
 	GameBookPath     string `db:"game_book_path"`
 }
 

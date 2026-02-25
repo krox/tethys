@@ -303,9 +303,9 @@ func (h *Handler) handleGameView(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	logByPly := make(map[int]string, len(logs))
+	logByPly := make(map[int]db.EngineLog, len(logs))
 	for _, entry := range logs {
-		logByPly[entry.Ply] = entry.Log
+		logByPly[entry.Ply] = entry
 	}
 	view, err := buildGameView(game, logByPly)
 	if err != nil {
@@ -317,11 +317,12 @@ func (h *Handler) handleGameView(w http.ResponseWriter, r *http.Request) {
 }
 
 type GameMoveView struct {
-	Index int
-	UCI   string
-	SAN   string
-	Side  string
-	Log   string
+	Index     int
+	UCI       string
+	SAN       string
+	Side      string
+	Log       string
+	ElapsedMS int64
 }
 
 type GamePositionView struct {
@@ -343,13 +344,20 @@ type GameView struct {
 	Page        string
 }
 
-func buildGameView(game db.GameDetail, logByPly map[int]string) (GameView, error) {
+func buildGameView(game db.GameDetail, logByPly map[int]db.EngineLog) (GameView, error) {
 	if logByPly == nil {
-		logByPly = map[int]string{}
+		logByPly = map[int]db.EngineLog{}
 	}
 	pos := chess.StartingPosition()
 	positions := []GamePositionView{{Index: 0, Board: boardFromPosition(pos), FEN: pos.String()}}
 	moves := make([]GameMoveView, 0)
+	movesByPly := make(map[int]GameMoveView)
+	maxLogPly := 0
+	for ply := range logByPly {
+		if ply > maxLogPly {
+			maxLogPly = ply
+		}
+	}
 
 	if strings.TrimSpace(game.MovesUCI) != "" {
 		parts := strings.Fields(game.MovesUCI)
@@ -374,9 +382,34 @@ func buildGameView(game db.GameDetail, logByPly map[int]string) (GameView, error
 			if ply%2 == 0 {
 				side = "Black"
 			}
-			moves = append(moves, GameMoveView{Index: ply, UCI: uci, SAN: san, Side: side, Log: logByPly[ply]})
+			movesByPly[ply] = GameMoveView{Index: ply, UCI: uci, SAN: san, Side: side}
 			positions = append(positions, GamePositionView{Index: i + 1, Board: boardFromPosition(pos), FEN: pos.String()})
 		}
+	}
+
+	maxMovePly := len(movesByPly)
+	maxPly := maxMovePly
+	if maxLogPly > maxPly {
+		maxPly = maxLogPly
+	}
+	for ply := 1; ply <= maxPly; ply++ {
+		entry := logByPly[ply]
+		move, ok := movesByPly[ply]
+		if !ok && entry.Log == "" && entry.ElapsedMS == 0 {
+			continue
+		}
+		if move.Index == 0 {
+			move.Index = ply
+			move.SAN = "(no move)"
+			if ply%2 == 0 {
+				move.Side = "Black"
+			} else {
+				move.Side = "White"
+			}
+		}
+		move.Log = entry.Log
+		move.ElapsedMS = entry.ElapsedMS
+		moves = append(moves, move)
 	}
 
 	return GameView{

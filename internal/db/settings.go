@@ -11,6 +11,7 @@ func (s *Store) GetSettings(ctx context.Context) (Settings, error) {
 		AnalysisEngineID: 0,
 		AnalysisDepth:    12,
 		GameMovetimeMS:   100,
+		GameSlackMS:      100,
 		GameBookPath:     "",
 	}
 	rows := []struct {
@@ -42,6 +43,10 @@ func (s *Store) GetSettings(ctx context.Context) (Settings, error) {
 			if v, err := strconv.Atoi(row.Value); err == nil {
 				settings.GameMovetimeMS = v
 			}
+		case "game_slack_ms":
+			if v, err := strconv.Atoi(row.Value); err == nil {
+				settings.GameSlackMS = v
+			}
 		case "game_book_path":
 			settings.GameBookPath = row.Value
 		}
@@ -72,6 +77,9 @@ func (s *Store) UpdateSettings(ctx context.Context, settings Settings) error {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, upsert, "game_movetime_ms", settings.GameMovetimeMS); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, upsert, "game_slack_ms", settings.GameSlackMS); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, upsert, "game_book_path", settings.GameBookPath); err != nil {

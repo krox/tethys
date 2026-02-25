@@ -76,6 +76,10 @@ func (h *Handler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request
 	if gameMovetime <= 0 {
 		gameMovetime = 100
 	}
+	gameSlack, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("game_slack_ms")))
+	if gameSlack <= 0 {
+		gameSlack = 100
+	}
 	gameBook := strings.TrimSpace(r.Form.Get("game_book"))
 	if gameBook == "(none)" {
 		gameBook = ""
@@ -105,6 +109,7 @@ func (h *Handler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request
 	cfg.AnalysisDepth = analysisDepth
 	cfg.AnalysisEngineID = analysisEngineID
 	cfg.GameMovetimeMS = gameMovetime
+	cfg.GameSlackMS = gameSlack
 	cfg.GameBookPath = gameBookPath
 
 	if err := h.store.UpdateSettings(r.Context(), cfg); err != nil {
