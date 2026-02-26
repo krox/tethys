@@ -77,7 +77,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/engines", h.handleAdminEngines)
 	mux.HandleFunc("POST /admin/engines", h.handleAdminEnginesSave)
 	mux.HandleFunc("POST /admin/engines/duplicate", h.handleAdminEngineDuplicate)
-	mux.HandleFunc("POST /admin/engines/add-external", h.handleAdminEngineAddExternal)
+	mux.HandleFunc("POST /admin/engines/add-unused", h.handleAdminEngineAddUnused)
+	mux.HandleFunc("POST /admin/engines/delete-unused", h.handleAdminEngineDeleteUnused)
 	mux.HandleFunc("POST /admin/engines/prune", h.handleAdminEnginePrune)
 	mux.HandleFunc("POST /admin/logout", h.handleAdminLogout)
 }

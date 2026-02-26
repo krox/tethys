@@ -27,3 +27,15 @@ func (s *Store) UpsertEval(ctx context.Context, e Eval) error {
 	`, e)
 	return err
 }
+
+func (s *Store) DeleteEvalsByEngine(ctx context.Context, engineID int64) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM evals WHERE engine_id = ?`, engineID)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return rows, nil
+}

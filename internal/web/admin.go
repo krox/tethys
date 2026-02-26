@@ -165,7 +165,7 @@ func (h *Handler) handleAdminEngines(w http.ResponseWriter, r *http.Request) {
 	}
 	view := buildAdminView(cfg, engines, nil, gameCounts)
 	view.Page = "engines"
-	view.EngineBinaries = engineBinaries
+	view.UnusedEngines = buildUnusedEngineViews(h.enginesDir, engines, engineBinaries)
 	_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 }
 
@@ -197,7 +197,7 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 		}
 		view.Page = "engines"
 		if bins, err := listEngineBinaries(h.enginesDir); err == nil {
-			view.EngineBinaries = bins
+			view.UnusedEngines = buildUnusedEngineViews(h.enginesDir, current, bins)
 		}
 		_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 		return
@@ -207,7 +207,7 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 		view.Engines = buildEngineViewsFromList(parsed, errMap, gameCounts)
 		view.Page = "engines"
 		if bins, err := listEngineBinaries(h.enginesDir); err == nil {
-			view.EngineBinaries = bins
+			view.UnusedEngines = buildUnusedEngineViews(h.enginesDir, current, bins)
 		}
 		_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 		return
@@ -260,7 +260,7 @@ func (h *Handler) handleAdminEnginesSave(w http.ResponseWriter, r *http.Request)
 		view = buildAdminView(cfg, fresh, errByID, gameCounts)
 		view.Page = "engines"
 		if bins, err := listEngineBinaries(h.enginesDir); err == nil {
-			view.EngineBinaries = bins
+			view.UnusedEngines = buildUnusedEngineViews(h.enginesDir, fresh, bins)
 		}
 		_ = h.tpl.ExecuteTemplate(w, "engine_settings.html", view)
 		return
@@ -280,11 +280,19 @@ func (h *Handler) handleAdminEnginePrune(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "invalid engine id", http.StatusBadRequest)
 		return
 	}
+	_ = h.store.ClearGameQueue(r.Context())
 	if _, err := h.store.DeleteGamesByEngine(r.Context(), engineID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_ = h.store.ClearGameQueue(r.Context())
+	if _, err := h.store.DeleteEvalsByEngine(r.Context(), engineID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := h.store.DeleteEngine(r.Context(), engineID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	http.Redirect(w, r, "/admin/engines", http.StatusSeeOther)
 }
 
@@ -324,12 +332,14 @@ func (h *Handler) handleAdminEngineDuplicate(w http.ResponseWriter, r *http.Requ
 	http.Redirect(w, r, "/admin/engines", http.StatusSeeOther)
 }
 
-func (h *Handler) handleAdminEngineAddExternal(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleAdminEngineAddUnused(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	name := strings.TrimSpace(r.Form.Get("engine_name"))
+	args := strings.TrimSpace(r.Form.Get("engine_args"))
+	init := r.Form.Get("engine_init")
 	binary := strings.TrimSpace(r.Form.Get("engine_binary"))
 	if binary == "" {
 		http.Error(w, "engine binary required", http.StatusBadRequest)
@@ -351,9 +361,21 @@ func (h *Handler) handleAdminEngineAddExternal(w http.ResponseWriter, r *http.Re
 		http.Error(w, "invalid engine binary", http.StatusBadRequest)
 		return
 	}
-	path := filepath.Join(h.enginesDir, binary)
+	current, err := h.store.ListEngines(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	enginePath := filepath.Join(h.enginesDir, binary)
+	for _, engine := range current {
+		if filepath.Clean(engine.Path) == enginePath {
+			http.Error(w, "engine already exists", http.StatusBadRequest)
+			return
+		}
+	}
+	path := enginePath
 	if name == "" {
-		name = engineNameFromPath(path)
+		name = binary
 	}
 	unique, err := h.uniqueEngineName(r.Context(), name)
 	if err != nil {
@@ -363,12 +385,60 @@ func (h *Handler) handleAdminEngineAddExternal(w http.ResponseWriter, r *http.Re
 	_, err = h.store.InsertEngine(r.Context(), db.Engine{
 		Name: unique,
 		Path: path,
+		Args: args,
+		Init: init,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	_ = h.store.ClearGameQueue(r.Context())
+	http.Redirect(w, r, "/admin/engines", http.StatusSeeOther)
+}
+
+func (h *Handler) handleAdminEngineDeleteUnused(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	binary := strings.TrimSpace(r.Form.Get("engine_binary"))
+	if binary == "" {
+		http.Error(w, "engine binary required", http.StatusBadRequest)
+		return
+	}
+	options, err := listEngineBinaries(h.enginesDir)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	valid := false
+	for _, opt := range options {
+		if opt == binary {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		http.Error(w, "invalid engine binary", http.StatusBadRequest)
+		return
+	}
+	current, err := h.store.ListEngines(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	enginePath := filepath.Join(h.enginesDir, binary)
+	for _, engine := range current {
+		if filepath.Clean(engine.Path) == enginePath {
+			http.Error(w, "engine already exists", http.StatusBadRequest)
+			return
+		}
+	}
+	path := enginePath
+	if err := os.Remove(path); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	http.Redirect(w, r, "/admin/engines", http.StatusSeeOther)
 }
 
@@ -383,11 +453,17 @@ type EngineView struct {
 	Games int
 }
 
+type UnusedEngineView struct {
+	Binary      string
+	DefaultName string
+}
+
 type AdminView struct {
 	Cfg            db.Settings
 	Engines        []EngineView
 	Page           string
 	EngineBinaries []string
+	UnusedEngines  []UnusedEngineView
 }
 
 func buildAdminView(cfg db.Settings, engines []db.Engine, errByID map[int64]string, gameCounts map[int64]int) AdminView {
@@ -409,6 +485,31 @@ func buildAdminView(cfg db.Settings, engines []db.Engine, errByID map[int64]stri
 	}
 
 	return AdminView{Cfg: cfg, Engines: views}
+}
+
+func buildUnusedEngineViews(enginesDir string, engines []db.Engine, binaries []string) []UnusedEngineView {
+	used := make(map[string]bool, len(engines))
+	for _, engine := range engines {
+		cleanPath := filepath.Clean(strings.TrimSpace(engine.Path))
+		if cleanPath == "" {
+			continue
+		}
+		base := filepath.Base(cleanPath)
+		if base == "" {
+			continue
+		}
+		if cleanPath == filepath.Join(enginesDir, base) {
+			used[base] = true
+		}
+	}
+	views := make([]UnusedEngineView, 0, len(binaries))
+	for _, binary := range binaries {
+		if used[binary] {
+			continue
+		}
+		views = append(views, UnusedEngineView{Binary: binary, DefaultName: binary})
+	}
+	return views
 }
 
 func parseEnginesFromForm(r *http.Request, existing map[int64]db.Engine) ([]db.Engine, AdminView, bool) {

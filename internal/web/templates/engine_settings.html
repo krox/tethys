@@ -20,24 +20,43 @@
             <h1>Engine Settings</h1>
 
             <div class="card">
-                <div class="engine-actions-bar">
-                    <button type="button" id="add_external_btn">Add external</button>
+                <div class="engine-unused">
+                    <h3>Unused engines</h3>
+                    {{if .UnusedEngines}}
+                    <div class="engine-unused-list">
+                        {{range .UnusedEngines}}
+                        <div class="engine-row">
+                            <span>{{.Binary}}</span>
+                            <div class="engine-actions-row">
+                                <button type="button" class="unused-add" data-binary="{{.Binary}}"
+                                    data-default-name="{{.DefaultName}}">Add</button>
+                                <form method="post" action="/admin/engines/delete-unused">
+                                    <input type="hidden" name="engine_binary" value="{{.Binary}}" />
+                                    <button type="submit" class="danger">Delete</button>
+                                </form>
+                            </div>
+                        </div>
+                        {{end}}
+                    </div>
+                    {{else}}
+                    <p class="hint">No unused engines found.</p>
+                    {{end}}
                 </div>
-                <dialog id="external_engine_dialog" class="engine-dialog">
-                    <form method="post" action="/admin/engines/add-external" class="form">
-                        <h3>Add external engine</h3>
-                        <label>Engine binary (data/engines)</label>
-                        <select name="engine_binary" required>
-                            <option value="">Select binary</option>
-                            {{range .EngineBinaries}}
-                            <option value="{{.}}">{{.}}</option>
-                            {{end}}
-                        </select>
-                        <label>Display name (optional)</label>
-                        <input name="engine_name" placeholder="stockfish" />
+                <dialog id="unused_engine_dialog" class="engine-dialog">
+                    <form method="post" action="/admin/engines/add-unused" class="form">
+                        <h3>Add engine</h3>
+                        <input type="hidden" name="engine_binary" id="unused_engine_binary" />
+                        <label>Executable</label>
+                        <input id="unused_engine_filename" disabled />
+                        <label>Name</label>
+                        <input name="engine_name" id="unused_engine_name" placeholder="stockfish" required />
+                        <label>Init commands</label>
+                        <textarea name="engine_init" id="unused_engine_init" rows="2"></textarea>
+                        <label>Args</label>
+                        <input name="engine_args" id="unused_engine_args" placeholder="" />
                         <div class="row">
                             <button type="submit">Add</button>
-                            <button type="button" id="external_cancel_btn">Cancel</button>
+                            <button type="button" id="unused_cancel_btn">Cancel</button>
                         </div>
                     </form>
                 </dialog>
@@ -59,12 +78,9 @@
                                         <button type="submit" class="duplicate-engine"
                                             formaction="/admin/engines/duplicate" formmethod="post" name="engine_id"
                                             value="{{.ID}}">Duplicate</button>
-                                        <button type="button" class="delete-engine" {{if gt .Games 0}}disabled{{end}}>
-                                            Delete
-                                        </button>
                                         <button type="submit" class="danger" formaction="/admin/engines/prune"
                                             formmethod="post" name="engine_id" value="{{.ID}}">
-                                            Delete games
+                                            Delete engine + games
                                         </button>
                                     </div>
 
@@ -125,28 +141,32 @@
                 countEl.value = String(cards.length);
             }
 
-            function bindCardActions(card) {
-                const del = card.querySelector('.delete-engine');
-                if (!del) return;
 
-                del.addEventListener('click', () => {
-                    if (del.disabled) return;
-                    card.remove();
-                    syncIndices();
+            const unusedDialog = document.getElementById('unused_engine_dialog');
+            const unusedBinary = document.getElementById('unused_engine_binary');
+            const unusedFilename = document.getElementById('unused_engine_filename');
+            const unusedName = document.getElementById('unused_engine_name');
+            const unusedInit = document.getElementById('unused_engine_init');
+            const unusedArgs = document.getElementById('unused_engine_args');
+            const unusedCancel = document.getElementById('unused_cancel_btn');
+
+            document.querySelectorAll('.unused-add').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const binary = btn.getAttribute('data-binary') || '';
+                    const defaultName = btn.getAttribute('data-default-name') || binary;
+                    if (unusedBinary) unusedBinary.value = binary;
+                    if (unusedFilename) unusedFilename.value = binary;
+                    if (unusedName) unusedName.value = defaultName;
+                    if (unusedInit) unusedInit.value = '';
+                    if (unusedArgs) unusedArgs.value = '';
+                    if (unusedDialog) unusedDialog.showModal();
                 });
+            });
+
+            if (unusedCancel && unusedDialog) {
+                unusedCancel.addEventListener('click', () => unusedDialog.close());
             }
 
-            const externalBtn = document.getElementById('add_external_btn');
-            const externalDialog = document.getElementById('external_engine_dialog');
-            const externalCancel = document.getElementById('external_cancel_btn');
-            if (externalBtn && externalDialog) {
-                externalBtn.addEventListener('click', () => externalDialog.showModal());
-            }
-            if (externalCancel && externalDialog) {
-                externalCancel.addEventListener('click', () => externalDialog.close());
-            }
-
-            list.querySelectorAll('.engine-card').forEach((card) => bindCardActions(card));
             syncIndices();
         })();
     </script>
