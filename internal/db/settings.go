@@ -13,6 +13,8 @@ func (s *Store) GetSettings(ctx context.Context) (Settings, error) {
 		GameMovetimeMS:   100,
 		GameSlackMS:      100,
 		GameBookPath:     "",
+		MatchSoftScale:   300,
+		MatchAllowMirror: false,
 	}
 	rows := []struct {
 		Key   string `db:"key"`
@@ -49,7 +51,18 @@ func (s *Store) GetSettings(ctx context.Context) (Settings, error) {
 			}
 		case "game_book_path":
 			settings.GameBookPath = row.Value
+		case "match_soft_scale":
+			if v, err := strconv.Atoi(row.Value); err == nil {
+				settings.MatchSoftScale = v
+			}
+		case "match_allow_mirror":
+			if v, err := strconv.Atoi(row.Value); err == nil {
+				settings.MatchAllowMirror = v != 0
+			}
 		}
+	}
+	if settings.MatchSoftScale <= 0 {
+		settings.MatchSoftScale = 300
 	}
 	return settings, nil
 }
@@ -83,6 +96,16 @@ func (s *Store) UpdateSettings(ctx context.Context, settings Settings) error {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, upsert, "game_book_path", settings.GameBookPath); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, upsert, "match_soft_scale", settings.MatchSoftScale); err != nil {
+		return err
+	}
+	mirror := 0
+	if settings.MatchAllowMirror {
+		mirror = 1
+	}
+	if _, err = tx.ExecContext(ctx, upsert, "match_allow_mirror", mirror); err != nil {
 		return err
 	}
 

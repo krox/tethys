@@ -65,24 +65,58 @@ func (h *Handler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request
 
 	openingMin, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("opening_min")))
 	if openingMin <= 0 {
-		openingMin = 20
+		openingMin = cfg.OpeningMin
+		if openingMin <= 0 {
+			openingMin = 20
+		}
 	}
 	analysisDepth, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("analysis_depth")))
 	if analysisDepth <= 0 {
-		analysisDepth = 12
+		analysisDepth = cfg.AnalysisDepth
+		if analysisDepth <= 0 {
+			analysisDepth = 12
+		}
 	}
-	analysisEngineID, _ := strconv.ParseInt(strings.TrimSpace(r.Form.Get("analysis_engine_id")), 10, 64)
+	analysisEngineID := cfg.AnalysisEngineID
+	if raw := strings.TrimSpace(r.Form.Get("analysis_engine_id")); raw != "" {
+		analysisEngineID, _ = strconv.ParseInt(raw, 10, 64)
+	}
 	gameMovetime, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("game_movetime_ms")))
 	if gameMovetime <= 0 {
-		gameMovetime = 100
+		gameMovetime = cfg.GameMovetimeMS
+		if gameMovetime <= 0 {
+			gameMovetime = 100
+		}
 	}
 	gameSlack, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("game_slack_ms")))
 	if gameSlack <= 0 {
-		gameSlack = 100
+		gameSlack = cfg.GameSlackMS
+		if gameSlack <= 0 {
+			gameSlack = 100
+		}
 	}
-	gameBook := strings.TrimSpace(r.Form.Get("game_book"))
-	if gameBook == "(none)" {
-		gameBook = ""
+	matchSoftScale, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("match_soft_scale")))
+	if matchSoftScale <= 0 {
+		matchSoftScale = cfg.MatchSoftScale
+		if matchSoftScale <= 0 {
+			matchSoftScale = 300
+		}
+	}
+	matchAllowMirror := cfg.MatchAllowMirror
+	if _, ok := r.Form["match_allow_mirror"]; ok {
+		raw := strings.TrimSpace(r.Form.Get("match_allow_mirror"))
+		matchAllowMirror = raw == "1" || strings.EqualFold(raw, "true") || strings.EqualFold(raw, "on")
+	}
+	gameBook := ""
+	if vals, ok := r.Form["game_book"]; ok {
+		if len(vals) > 0 {
+			gameBook = strings.TrimSpace(vals[0])
+		}
+		if gameBook == "(none)" {
+			gameBook = ""
+		}
+	} else if strings.TrimSpace(cfg.GameBookPath) != "" {
+		gameBook = filepath.Base(cfg.GameBookPath)
 	}
 	gameBookPath := ""
 	if gameBook != "" {
@@ -111,6 +145,8 @@ func (h *Handler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request
 	cfg.GameMovetimeMS = gameMovetime
 	cfg.GameSlackMS = gameSlack
 	cfg.GameBookPath = gameBookPath
+	cfg.MatchSoftScale = matchSoftScale
+	cfg.MatchAllowMirror = matchAllowMirror
 
 	if err := h.store.UpdateSettings(r.Context(), cfg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -444,8 +446,8 @@ func (r *Runner) fillGameQueue(ctx context.Context, settings db.Settings) error 
 	if err != nil {
 		return err
 	}
-	pairs := buildNeighborPairs(engines, 2)
-	if len(pairs) == 0 {
+	weightedPairs := buildDistanceWeightedPairs(engines, settings.MatchSoftScale, settings.MatchAllowMirror)
+	if len(weightedPairs) == 0 {
 		return nil
 	}
 	counts, err := r.store.ListMatchupCounts(ctx)
@@ -454,15 +456,17 @@ func (r *Runner) fillGameQueue(ctx context.Context, settings db.Settings) error 
 	}
 
 	type pairCount struct {
-		AID int64
-		BID int64
-		AB  int
-		BA  int
+		AID      int64
+		BID      int64
+		AB       int
+		BA       int
+		Distance float64
+		Weight   float64
 	}
 
-	pairCounts := make(map[[2]int64]*pairCount, len(pairs))
-	for _, pair := range pairs {
-		pairCounts[[2]int64{pair.AID, pair.BID}] = &pairCount{AID: pair.AID, BID: pair.BID}
+	pairCounts := make(map[[2]int64]*pairCount, len(weightedPairs))
+	for _, pair := range weightedPairs {
+		pairCounts[[2]int64{pair.AID, pair.BID}] = &pairCount{AID: pair.AID, BID: pair.BID, Distance: pair.Distance, Weight: pair.Weight}
 	}
 	for _, c := range counts {
 		a := c.WhiteID
@@ -483,21 +487,57 @@ func (r *Runner) fillGameQueue(ctx context.Context, settings db.Settings) error 
 		}
 	}
 
-	minTotal := -1
-	for _, pc := range pairCounts {
-		total := pc.AB + pc.BA
-		if minTotal == -1 || total < minTotal {
-			minTotal = total
-		}
-	}
-	if minTotal < 0 {
+	if len(pairCounts) == 0 {
 		return nil
 	}
 
-	entries := make([]db.GameQueueEntry, 0, len(pairCounts)*4)
+	selected := make([]*pairCount, 0, len(pairCounts))
 	for _, pc := range pairCounts {
-		total := pc.AB + pc.BA
-		if total != minTotal {
+		selected = append(selected, pc)
+	}
+	sort.Slice(selected, func(i, j int) bool {
+		totalI := selected[i].AB + selected[i].BA
+		totalJ := selected[j].AB + selected[j].BA
+		scoreI := selected[i].Weight / float64(1+totalI)
+		scoreJ := selected[j].Weight / float64(1+totalJ)
+		if math.Abs(scoreI-scoreJ) > 1e-9 {
+			return scoreI > scoreJ
+		}
+		if totalI != totalJ {
+			return totalI < totalJ
+		}
+		if selected[i].Distance != selected[j].Distance {
+			return selected[i].Distance < selected[j].Distance
+		}
+		if selected[i].AID != selected[j].AID {
+			return selected[i].AID < selected[j].AID
+		}
+		return selected[i].BID < selected[j].BID
+	})
+
+	eligibleCount := len(eligibleEngines(engines))
+	targetPairs := eligibleCount * 2
+	if targetPairs < 4 {
+		targetPairs = 4
+	}
+	if targetPairs > 32 {
+		targetPairs = 32
+	}
+	if targetPairs > len(selected) {
+		targetPairs = len(selected)
+	}
+
+	entries := make([]db.GameQueueEntry, 0, targetPairs*4)
+	for _, pc := range selected[:targetPairs] {
+		if pc.AID == pc.BID {
+			for i := 0; i < 2; i++ {
+				entries = append(entries, db.GameQueueEntry{
+					WhiteID:    pc.AID,
+					BlackID:    pc.BID,
+					MovetimeMS: settings.GameMovetimeMS,
+					BookPath:   settings.GameBookPath,
+				})
+			}
 			continue
 		}
 		for i := 0; i < 2; i++ {

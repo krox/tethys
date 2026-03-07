@@ -36,6 +36,13 @@
                         <option value="{{.}}" {{if eq . $.BookName}}selected{{end}}>{{.}}</option>
                         {{end}}
                     </select>
+                    <label>Match soft scale (Elo)</label>
+                    <input name="match_soft_scale" value="{{.Cfg.MatchSoftScale}}" />
+                    <label>
+                        <input type="checkbox" name="match_allow_mirror" value="1" {{if
+                            .Cfg.MatchAllowMirror}}checked{{end}} />
+                        Allow mirror matches (engine vs itself)
+                    </label>
                     <div class="row">
                         <button type="submit">Save</button>
                     </div>
@@ -44,10 +51,12 @@
 
             <div class="card">
                 <h2>Matchmaking Policy</h2>
-                <p class="hint">Matchups are scheduled automatically. Each engine plays the two higher and two lower
-                    neighbors in the Elo ranking, with both colors, and no mirror matches.</p>
-                <p class="hint">When the game queue is empty, Elo ratings are recomputed and new games are scheduled to
-                    keep active matchups balanced.</p>
+                <p class="hint">Distance-weighted policy schedules all valid pairs, but assigns far-away Elo opponents
+                    fewer games. Scale controls how fast that decay happens.</p>
+                <p class="hint">Mirror matches use the same formula with Elo distance 0, so they are weighted like the
+                    closest possible opponent pair.</p>
+                <p class="hint">Queue refill balances underplayed pairs first. Non-mirror pairs are scheduled in both
+                    colors; mirror pairs are scheduled directly.</p>
             </div>
         </main>
     </div>

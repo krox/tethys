@@ -7,6 +7,8 @@ type Settings struct {
 	GameMovetimeMS   int    `db:"game_movetime_ms"`
 	GameSlackMS      int    `db:"game_slack_ms"`
 	GameBookPath     string `db:"game_book_path"`
+	MatchSoftScale   int    `db:"match_soft_scale"`
+	MatchAllowMirror bool   `db:"match_allow_mirror"`
 }
 
 type GameDetail struct {

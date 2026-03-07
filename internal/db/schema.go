@@ -121,6 +121,8 @@ func insertDefaultSettings(db *sqlx.DB) {
 	db.MustExec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('game_movetime_ms', 100)`)
 	db.MustExec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('game_slack_ms', 100)`)
 	db.MustExec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('game_book_path', '')`)
+	db.MustExec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('match_soft_scale', 300)`)
+	db.MustExec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('match_allow_mirror', 0)`)
 }
 
 func ensureEngineLogColumns(db *sqlx.DB) {

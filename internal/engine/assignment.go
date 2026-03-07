@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"math"
 	"strings"
 
 	"tethys/internal/db"
@@ -19,11 +20,14 @@ type matchupPair struct {
 	BID int64
 }
 
-func buildNeighborPairs(engines []db.Engine, radius int) []matchupPair {
-	if radius < 1 {
-		return nil
-	}
+type weightedMatchupPair struct {
+	AID      int64
+	BID      int64
+	Distance float64
+	Weight   float64
+}
 
+func eligibleEngines(engines []db.Engine) []db.Engine {
 	eligible := make([]db.Engine, 0, len(engines))
 	for _, e := range engines {
 		if e.ID == 0 || e.Name == "" || e.Path == "" {
@@ -31,39 +35,46 @@ func buildNeighborPairs(engines []db.Engine, radius int) []matchupPair {
 		}
 		eligible = append(eligible, e)
 	}
-	if len(eligible) < 2 {
+	return eligible
+}
+
+func buildDistanceWeightedPairs(engines []db.Engine, softScale int, allowMirror bool) []weightedMatchupPair {
+	eligible := eligibleEngines(engines)
+	if len(eligible) == 0 {
 		return nil
 	}
-
-	pairs := make(map[[2]int64]bool)
-	for i, engine := range eligible {
-		start := i - radius
-		if start < 0 {
-			start = 0
-		}
-		end := i + radius
-		if end >= len(eligible) {
-			end = len(eligible) - 1
-		}
-		for j := start; j <= end; j++ {
-			if i == j {
-				continue
-			}
-			other := eligible[j]
-			a := engine.ID
-			b := other.ID
-			if a > b {
-				a, b = b, a
-			}
-			pairs[[2]int64{a, b}] = true
-		}
+	if !allowMirror && len(eligible) < 2 {
+		return nil
+	}
+	if softScale <= 0 {
+		softScale = 300
 	}
 
-	out := make([]matchupPair, 0, len(pairs))
-	for key := range pairs {
-		out = append(out, matchupPair{AID: key[0], BID: key[1]})
+	estimated := len(eligible) * (len(eligible) - 1) / 2
+	if allowMirror {
+		estimated += len(eligible)
 	}
-	return out
+	pairs := make([]weightedMatchupPair, 0, estimated)
+	for i := 0; i < len(eligible); i++ {
+		start := i + 1
+		if allowMirror {
+			start = i
+		}
+		for j := start; j < len(eligible); j++ {
+			a := eligible[i]
+			b := eligible[j]
+			distance := math.Abs(a.Elo - b.Elo)
+			ratio := distance / float64(softScale)
+			weight := math.Exp(-(ratio * ratio))
+			pairs = append(pairs, weightedMatchupPair{
+				AID:      a.ID,
+				BID:      b.ID,
+				Distance: distance,
+				Weight:   weight,
+			})
+		}
+	}
+	return pairs
 }
 
 func assignmentFromQueue(entry db.GameQueueEntry, enginesByID map[int64]db.Engine) (ColorAssignment, bool) {
