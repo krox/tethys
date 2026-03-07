@@ -307,13 +307,18 @@ func (h *Handler) handleAdminEngineDuplicate(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "invalid engine id", http.StatusBadRequest)
 		return
 	}
+	name := strings.TrimSpace(r.Form.Get("engine_name"))
+	args := strings.TrimSpace(r.Form.Get("engine_args"))
+	init := r.Form.Get("engine_init")
 	original, err := h.store.EngineByID(r.Context(), engineID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	baseName := fmt.Sprintf("%s (copy)", strings.TrimSpace(original.Name))
-	unique, err := h.uniqueEngineName(r.Context(), baseName)
+	if name == "" {
+		name = fmt.Sprintf("copy of %s", strings.TrimSpace(original.Name))
+	}
+	unique, err := h.uniqueEngineName(r.Context(), name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -321,10 +326,58 @@ func (h *Handler) handleAdminEngineDuplicate(w http.ResponseWriter, r *http.Requ
 	_, err = h.store.InsertEngine(r.Context(), db.Engine{
 		Name: unique,
 		Path: original.Path,
-		Args: original.Args,
-		Init: original.Init,
+		Args: args,
+		Init: init,
 	})
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = h.store.ClearGameQueue(r.Context())
+	http.Redirect(w, r, "/admin/engines", http.StatusSeeOther)
+}
+
+func (h *Handler) handleAdminEngineRename(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	idStr := strings.TrimSpace(r.Form.Get("engine_id"))
+	engineID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || engineID == 0 {
+		http.Error(w, "invalid engine id", http.StatusBadRequest)
+		return
+	}
+	name := strings.TrimSpace(r.Form.Get("engine_name"))
+	if name == "" {
+		http.Error(w, "engine name required", http.StatusBadRequest)
+		return
+	}
+	original, err := h.store.EngineByID(r.Context(), engineID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if name != original.Name {
+		engines, err := h.store.ListEngines(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		for _, engine := range engines {
+			if engine.ID != engineID && strings.TrimSpace(engine.Name) == name {
+				http.Error(w, "engine name already exists", http.StatusBadRequest)
+				return
+			}
+		}
+	}
+	if err := h.store.UpdateEngine(r.Context(), db.Engine{
+		ID:   original.ID,
+		Name: name,
+		Path: original.Path,
+		Args: original.Args,
+		Init: original.Init,
+	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

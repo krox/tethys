@@ -42,76 +42,77 @@
                     <p class="hint">No unused engines found.</p>
                     {{end}}
                 </div>
-                <dialog id="unused_engine_dialog" class="engine-dialog">
-                    <form method="post" action="/admin/engines/add-unused" class="form">
-                        <h3>Add engine</h3>
-                        <input type="hidden" name="engine_binary" id="unused_engine_binary" />
-                        <label>Executable</label>
-                        <input id="unused_engine_filename" disabled />
+                <dialog id="engine_dialog" class="engine-dialog">
+                    <form method="post" action="/admin/engines/add-unused" class="form" id="engine_dialog_form">
+                        <h3 id="engine_dialog_title">Add engine</h3>
+                        <input type="hidden" name="engine_binary" id="engine_dialog_binary" />
+                        <input type="hidden" name="engine_id" id="engine_dialog_id" />
+                        <div id="engine_dialog_exec_row">
+                            <label>Executable</label>
+                            <input id="engine_dialog_filename" disabled />
+                        </div>
                         <label>Name</label>
-                        <input name="engine_name" id="unused_engine_name" placeholder="stockfish" required />
-                        <label>Init commands</label>
-                        <textarea name="engine_init" id="unused_engine_init" rows="2"></textarea>
-                        <label>Args</label>
-                        <input name="engine_args" id="unused_engine_args" placeholder="" />
+                        <input name="engine_name" id="engine_dialog_name" placeholder="stockfish" required />
+                        <div id="engine_dialog_init_row">
+                            <label>Init commands</label>
+                            <textarea name="engine_init" id="engine_dialog_init" rows="2"></textarea>
+                        </div>
+                        <div id="engine_dialog_args_row">
+                            <label>Args</label>
+                            <input name="engine_args" id="engine_dialog_args" placeholder="" />
+                        </div>
                         <div class="row">
-                            <button type="submit">Add</button>
-                            <button type="button" id="unused_cancel_btn">Cancel</button>
+                            <button type="submit">Save</button>
+                            <button type="button" id="engine_dialog_cancel">Cancel</button>
                         </div>
                     </form>
                 </dialog>
-                <form method="post" action="/admin/engines" class="form">
-                    <input type="hidden" name="engine_count" id="engine_count" value="{{len .Engines}}" />
-                    <div id="engine_list">
+                <div id="engine_list">
                         {{range .Engines}}
                         <div class="engine-card" data-index="{{.Index}}">
-                            <input type="hidden" name="engine_id_{{.Index}}" value="{{.ID}}" />
-                            <input type="hidden" name="engine_path_{{.Index}}" data-field="path" value="{{.Path}}" />
+                            <input type="hidden" data-field="name" value="{{.Name}}" />
+                            <input type="hidden" data-field="path" value="{{.Path}}" />
+                            <input type="hidden" data-field="args" value="{{.Args}}" />
+                            <textarea data-field="init" style="display:none">{{.Init}}</textarea>
                             <div class="engine-top">
                                 <div class="engine-row">
-                                    <span>#{{.ID}}</span>
-                                    <input name="engine_name_{{.Index}}" data-field="name" value="{{.Name}}"
-                                        placeholder="unique name" />
+                                    <span class="engine-title">{{.Name}}</span>
+                                    <span class="hint">#{{.ID}}</span>
+                                    <span class="hint">{{.Games}} games</span>
                                 </div>
                                 <div class="engine-actions">
                                     <div class="engine-actions-row">
-                                        <button type="submit" class="duplicate-engine"
-                                            formaction="/admin/engines/duplicate" formmethod="post" name="engine_id"
-                                            value="{{.ID}}">Duplicate</button>
-                                        <button type="submit" class="danger" formaction="/admin/engines/prune"
-                                            formmethod="post" name="engine_id" value="{{.ID}}">
-                                            Delete engine + games
+                                        <button type="button" class="rename-engine" data-engine-id="{{.ID}}">
+                                            Rename
                                         </button>
+                                        <button type="button" class="duplicate-engine" data-engine-id="{{.ID}}">
+                                            Duplicate
+                                        </button>
+                                        <form method="post" action="/admin/engines/prune">
+                                            <input type="hidden" name="engine_id" value="{{.ID}}" />
+                                            <button type="submit" class="danger">Delete</button>
+                                        </form>
                                     </div>
-
                                 </div>
                             </div>
-                            <div class="engine-row">
-                                <div>
-                                    <label>Init commands</label>
-                                    <textarea name="engine_init_{{.Index}}" data-field="init"
-                                        rows="2">{{.Init}}</textarea>
-                                </div>
-                                <div>
-                                    <label>Args</label>
-                                    <input name="engine_args_{{.Index}}" data-field="args" value="{{.Args}}"
-                                        placeholder="" />
-                                </div>
-                            </div>
-
                             <div class="engine-meta">
-                                <span class="hint">{{.Games}} games</span>
-                                <span class="hint">Path:{{.Path}}</span>
+                                <span class="hint">Path: {{.Path}}</span>
+                                {{if .Args}}
+                                <span class="hint">Args: {{.Args}}</span>
+                                {{else}}
+                                <span class="hint">Args: (none)</span>
+                                {{end}}
+                                {{if .Init}}
+                                <span class="hint">Init: {{.Init}}</span>
+                                {{else}}
+                                <span class="hint">Init: (none)</span>
+                                {{end}}
                                 {{if .Error}}<span class="error">{{.Error}}</span>{{end}}
                             </div>
 
                         </div>
                         {{end}}
                     </div>
-                    <div class="row">
-                        <button type="submit">Save</button>
-                    </div>
-                </form>
             </div>
 
             <p class="hint">Notes: engine args are split on spaces (no shell quoting). Init commands are sent as-is,
@@ -122,52 +123,105 @@
 
     <script>
         (function () {
-            const list = document.getElementById('engine_list');
-            const countEl = document.getElementById('engine_count');
-            function syncIndices() {
-                const cards = Array.from(list.querySelectorAll('.engine-card'));
-                cards.forEach((card, index) => {
-                    card.dataset.index = String(index);
-                    const idInput = card.querySelector('input[name^="engine_id_"]');
-                    if (idInput) {
-                        idInput.name = `engine_id_${index}`;
-                    }
-                    card.querySelectorAll('[data-field]').forEach((el) => {
-                        const field = el.getAttribute('data-field');
-                        if (!field) return;
-                        el.name = `engine_${field}_${index}`;
-                    });
-                });
-                countEl.value = String(cards.length);
+            const dialog = document.getElementById('engine_dialog');
+            const dialogForm = document.getElementById('engine_dialog_form');
+            const dialogTitle = document.getElementById('engine_dialog_title');
+            const dialogBinary = document.getElementById('engine_dialog_binary');
+            const dialogID = document.getElementById('engine_dialog_id');
+            const dialogExecRow = document.getElementById('engine_dialog_exec_row');
+            const dialogFilename = document.getElementById('engine_dialog_filename');
+            const dialogName = document.getElementById('engine_dialog_name');
+            const dialogInitRow = document.getElementById('engine_dialog_init_row');
+            const dialogInit = document.getElementById('engine_dialog_init');
+            const dialogArgsRow = document.getElementById('engine_dialog_args_row');
+            const dialogArgs = document.getElementById('engine_dialog_args');
+            const dialogCancel = document.getElementById('engine_dialog_cancel');
+
+            function openDialog(config) {
+                if (!dialogForm || !dialog) return;
+                dialogForm.action = config.action;
+                if (dialogTitle) dialogTitle.textContent = config.title;
+                if (dialogBinary) dialogBinary.value = config.binary || '';
+                if (dialogID) dialogID.value = config.engineId || '';
+                if (dialogFilename) dialogFilename.value = config.filename || '';
+                if (dialogName) dialogName.value = config.name || '';
+                if (dialogInit) dialogInit.value = config.init || '';
+                if (dialogArgs) dialogArgs.value = config.args || '';
+                if (dialogExecRow) dialogExecRow.style.display = config.showExec ? '' : 'none';
+                if (dialogInitRow) dialogInitRow.style.display = config.showInit ? '' : 'none';
+                if (dialogArgsRow) dialogArgsRow.style.display = config.showArgs ? '' : 'none';
+                dialog.showModal();
             }
-
-
-            const unusedDialog = document.getElementById('unused_engine_dialog');
-            const unusedBinary = document.getElementById('unused_engine_binary');
-            const unusedFilename = document.getElementById('unused_engine_filename');
-            const unusedName = document.getElementById('unused_engine_name');
-            const unusedInit = document.getElementById('unused_engine_init');
-            const unusedArgs = document.getElementById('unused_engine_args');
-            const unusedCancel = document.getElementById('unused_cancel_btn');
 
             document.querySelectorAll('.unused-add').forEach((btn) => {
                 btn.addEventListener('click', () => {
                     const binary = btn.getAttribute('data-binary') || '';
                     const defaultName = btn.getAttribute('data-default-name') || binary;
-                    if (unusedBinary) unusedBinary.value = binary;
-                    if (unusedFilename) unusedFilename.value = binary;
-                    if (unusedName) unusedName.value = defaultName;
-                    if (unusedInit) unusedInit.value = '';
-                    if (unusedArgs) unusedArgs.value = '';
-                    if (unusedDialog) unusedDialog.showModal();
+                    openDialog({
+                        action: '/admin/engines/add-unused',
+                        title: 'Add engine',
+                        binary,
+                        filename: binary,
+                        name: defaultName,
+                        init: '',
+                        args: '',
+                        showExec: true,
+                        showInit: true,
+                        showArgs: true
+                    });
                 });
             });
 
-            if (unusedCancel && unusedDialog) {
-                unusedCancel.addEventListener('click', () => unusedDialog.close());
+            document.querySelectorAll('.rename-engine').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const card = btn.closest('.engine-card');
+                    if (!card) return;
+                    const engineId = btn.getAttribute('data-engine-id') || '';
+                    const nameEl = card.querySelector('input[data-field="name"]');
+                    const baseName = nameEl ? nameEl.value.trim() : '';
+                    openDialog({
+                        action: '/admin/engines/rename',
+                        title: 'Rename engine',
+                        engineId,
+                        name: baseName,
+                        showExec: false,
+                        showInit: false,
+                        showArgs: false
+                    });
+                });
+            });
+
+            document.querySelectorAll('.duplicate-engine').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const card = btn.closest('.engine-card');
+                    if (!card) return;
+                    const engineId = btn.getAttribute('data-engine-id') || '';
+                    const nameEl = card.querySelector('input[data-field="name"]');
+                    const argsEl = card.querySelector('input[data-field="args"]');
+                    const initEl = card.querySelector('textarea[data-field="init"]');
+                    const pathEl = card.querySelector('input[data-field="path"]');
+                    const baseName = nameEl ? nameEl.value.trim() : '';
+                    const displayName = baseName ? `copy of ${baseName}` : 'copy of engine';
+                    const filename = pathEl ? pathEl.value.trim().split('/').pop() : '';
+                    openDialog({
+                        action: '/admin/engines/duplicate',
+                        title: 'Duplicate engine',
+                        engineId,
+                        filename,
+                        name: displayName,
+                        init: initEl ? initEl.value : '',
+                        args: argsEl ? argsEl.value : '',
+                        showExec: true,
+                        showInit: true,
+                        showArgs: true
+                    });
+                });
+            });
+
+            if (dialogCancel && dialog) {
+                dialogCancel.addEventListener('click', () => dialog.close());
             }
 
-            syncIndices();
         })();
     </script>
 </body>
