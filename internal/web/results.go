@@ -62,14 +62,20 @@ func (h *Handler) handleResults(w http.ResponseWriter, r *http.Request) {
 	}
 	matchupsByEngine := buildMatchupsByEngine(rows)
 	gamesByEngine := buildGamesByEngine(rows)
+	eloByName := make(map[string]float64, len(engines))
+	for _, eng := range engines {
+		eloByName[eng.Name] = eng.Elo
+	}
 	view := make([]RankingView, 0, len(engines))
 	for i, eng := range engines {
 		matchups := matchupsByEngine[eng.Name]
 		sort.Slice(matchups, func(i, j int) bool {
-			if matchups[i].Total == matchups[j].Total {
+			eloI := eloByName[matchups[i].Opponent]
+			eloJ := eloByName[matchups[j].Opponent]
+			if eloI == eloJ {
 				return matchups[i].Opponent < matchups[j].Opponent
 			}
-			return matchups[i].Total > matchups[j].Total
+			return eloI > eloJ
 		})
 		view = append(view, RankingView{RankingRow: RankingRow{
 			Rank:  i + 1,
