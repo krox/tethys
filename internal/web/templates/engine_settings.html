@@ -68,51 +68,51 @@
                     </form>
                 </dialog>
                 <div id="engine_list">
-                        {{range .Engines}}
-                        <div class="engine-card" data-index="{{.Index}}">
-                            <input type="hidden" data-field="name" value="{{.Name}}" />
-                            <input type="hidden" data-field="path" value="{{.Path}}" />
-                            <input type="hidden" data-field="args" value="{{.Args}}" />
-                            <textarea data-field="init" style="display:none">{{.Init}}</textarea>
-                            <div class="engine-top">
-                                <div class="engine-row">
-                                    <span class="engine-title">{{.Name}}</span>
-                                    <span class="hint">#{{.ID}}</span>
-                                    <span class="hint">{{.Games}} games</span>
-                                </div>
-                                <div class="engine-actions">
-                                    <div class="engine-actions-row">
-                                        <button type="button" class="rename-engine" data-engine-id="{{.ID}}">
-                                            Rename
-                                        </button>
-                                        <button type="button" class="duplicate-engine" data-engine-id="{{.ID}}">
-                                            Duplicate
-                                        </button>
-                                        <form method="post" action="/admin/engines/prune">
-                                            <input type="hidden" name="engine_id" value="{{.ID}}" />
-                                            <button type="submit" class="danger">Delete</button>
-                                        </form>
-                                    </div>
+                    {{range .Engines}}
+                    <div class="engine-card" data-index="{{.Index}}">
+                        <input type="hidden" data-field="name" value="{{.Name}}" />
+                        <input type="hidden" data-field="path" value="{{.Path}}" />
+                        <input type="hidden" data-field="args" value="{{.Args}}" />
+                        <textarea data-field="init" style="display:none">{{.Init}}</textarea>
+                        <div class="engine-top">
+                            <div class="engine-row">
+                                <span class="engine-title">{{.Name}}</span>
+                                <span class="hint">#{{.ID}}</span>
+                                <span class="hint">{{.Games}} games</span>
+                            </div>
+                            <div class="engine-actions">
+                                <div class="engine-actions-row">
+                                    <button type="button" class="rename-engine" data-engine-id="{{.ID}}">
+                                        Rename
+                                    </button>
+                                    <button type="button" class="duplicate-engine" data-engine-id="{{.ID}}">
+                                        Duplicate
+                                    </button>
+                                    <form method="post" action="/admin/engines/prune">
+                                        <input type="hidden" name="engine_id" value="{{.ID}}" />
+                                        <button type="submit" class="danger">Delete</button>
+                                    </form>
                                 </div>
                             </div>
-                            <div class="engine-meta">
-                                <span class="hint">Path: {{.Path}}</span>
-                                {{if .Args}}
-                                <span class="hint">Args: {{.Args}}</span>
-                                {{else}}
-                                <span class="hint">Args: (none)</span>
-                                {{end}}
-                                {{if .Init}}
-                                <span class="hint">Init: {{.Init}}</span>
-                                {{else}}
-                                <span class="hint">Init: (none)</span>
-                                {{end}}
-                                {{if .Error}}<span class="error">{{.Error}}</span>{{end}}
-                            </div>
-
                         </div>
-                        {{end}}
+                        <div class="engine-meta">
+                            <span class="hint">Path: {{.Path}}</span>
+                            {{if .Args}}
+                            <span class="hint">Args: {{.Args}}</span>
+                            {{else}}
+                            <span class="hint">Args: (none)</span>
+                            {{end}}
+                            {{if .Init}}
+                            <span class="hint">Init: {{.Init}}</span>
+                            {{else}}
+                            <span class="hint">Init: (none)</span>
+                            {{end}}
+                            {{if .Error}}<span class="error">{{.Error}}</span>{{end}}
+                        </div>
+
                     </div>
+                    {{end}}
+                </div>
             </div>
 
             <p class="hint">Notes: engine args are split on spaces (no shell quoting). Init commands are sent as-is,

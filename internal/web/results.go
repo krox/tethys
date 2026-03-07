@@ -1,6 +1,7 @@
 package web
 
 import (
+	"math"
 	"net/http"
 	"sort"
 
@@ -16,14 +17,18 @@ type RankingRow struct {
 }
 
 type MatchupBreakdown struct {
-	Opponent string
-	Wins     int
-	Losses   int
-	Draws    int
-	Total    int
-	WinPct   float64
-	LossPct  float64
-	DrawPct  float64
+	Opponent         string
+	Wins             int
+	Losses           int
+	Draws            int
+	Total            int
+	WinPct           float64
+	LossPct          float64
+	DrawPct          float64
+	ExpectedScorePct float64
+	ActualScorePct   float64
+	DeltaScorePct    float64
+	EloDiff          float64
 }
 
 type RankingView struct {
@@ -69,6 +74,19 @@ func (h *Handler) handleResults(w http.ResponseWriter, r *http.Request) {
 	view := make([]RankingView, 0, len(engines))
 	for i, eng := range engines {
 		matchups := matchupsByEngine[eng.Name]
+		for j := range matchups {
+			oppElo := eloByName[matchups[j].Opponent]
+			deltaElo := eng.Elo - oppElo
+			expected := 100.0 / (1.0 + math.Pow(10.0, -deltaElo/400.0))
+			actual := 0.0
+			if matchups[j].Total > 0 {
+				actual = (float64(matchups[j].Wins) + 0.5*float64(matchups[j].Draws)) * 100.0 / float64(matchups[j].Total)
+			}
+			matchups[j].ExpectedScorePct = expected
+			matchups[j].ActualScorePct = actual
+			matchups[j].DeltaScorePct = actual - expected
+			matchups[j].EloDiff = deltaElo
+		}
 		sort.Slice(matchups, func(i, j int) bool {
 			eloI := eloByName[matchups[i].Opponent]
 			eloJ := eloByName[matchups[j].Opponent]
