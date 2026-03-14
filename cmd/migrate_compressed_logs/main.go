@@ -51,8 +51,8 @@ func main() {
 			if err != nil {
 				log.Fatalf("load legacy logs for game %d: %v", gameID, err)
 			}
-			if err := store.InsertCompressedEngineLogs(ctx, gameID, logs); err != nil {
-				log.Fatalf("insert compressed logs for game %d: %v", gameID, err)
+			if err := store.MigrateGameLogsToCompressed(ctx, gameID, logs); err != nil {
+				log.Fatalf("migrate compressed logs for game %d: %v", gameID, err)
 			}
 			migrated++
 			afterID = gameID
@@ -60,5 +60,5 @@ func main() {
 		log.Printf("migrated %d games so far (last game_id=%d)", migrated, afterID)
 	}
 
-	fmt.Printf("done: migrated %d games into compressed_engine_logs\n", migrated)
+	fmt.Printf("done: migrated %d games into compressed_engine_logs and removed legacy engine_logs rows\n", migrated)
 }
