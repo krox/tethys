@@ -2,7 +2,9 @@ package db
 
 import (
 	"context"
+	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 func (s *Store) GetSettings(ctx context.Context) (Settings, error) {
@@ -50,7 +52,7 @@ func (s *Store) GetSettings(ctx context.Context) (Settings, error) {
 				settings.GameSlackMS = v
 			}
 		case "game_book_path":
-			settings.GameBookPath = row.Value
+			settings.GameBookPath = normalizeBookRef(row.Value)
 		case "match_soft_scale":
 			if v, err := strconv.Atoi(row.Value); err == nil {
 				settings.MatchSoftScale = v
@@ -95,7 +97,7 @@ func (s *Store) UpdateSettings(ctx context.Context, settings Settings) error {
 	if _, err = tx.ExecContext(ctx, upsert, "game_slack_ms", settings.GameSlackMS); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, upsert, "game_book_path", settings.GameBookPath); err != nil {
+	if _, err = tx.ExecContext(ctx, upsert, "game_book_path", normalizeBookRef(settings.GameBookPath)); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, upsert, "match_soft_scale", settings.MatchSoftScale); err != nil {
@@ -110,4 +112,16 @@ func (s *Store) UpdateSettings(ctx context.Context, settings Settings) error {
 	}
 
 	return tx.Commit()
+}
+
+func normalizeBookRef(raw string) string {
+	ref := strings.TrimSpace(raw)
+	if ref == "" {
+		return ""
+	}
+	base := filepath.Base(ref)
+	if base == "" || base == "." || base == string(filepath.Separator) {
+		return ""
+	}
+	return base
 }

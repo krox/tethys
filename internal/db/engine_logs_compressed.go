@@ -55,60 +55,6 @@ func (s *Store) CompressedEngineLogsByGame(ctx context.Context, gameID int64) (m
 	return logs, true, nil
 }
 
-func (s *Store) ListGameIDsMissingCompressedLogs(ctx context.Context, afterID int64, limit int) ([]int64, error) {
-	if limit <= 0 {
-		limit = 500
-	}
-	var ids []int64
-	err := s.db.SelectContext(ctx, &ids, `
-		SELECT g.id
-		FROM games g
-		WHERE g.id > ?
-		  AND EXISTS (SELECT 1 FROM engine_logs el WHERE el.game_id = g.id)
-		  AND NOT EXISTS (SELECT 1 FROM compressed_engine_logs cel WHERE cel.game_id = g.id)
-		ORDER BY g.id ASC
-		LIMIT ?
-	`, afterID, limit)
-	if err != nil {
-		return nil, err
-	}
-	return ids, nil
-}
-
-func (s *Store) MigrateGameLogsToCompressed(ctx context.Context, gameID int64, logs []EngineLog) error {
-	if len(logs) == 0 {
-		return nil
-	}
-
-	jsonPayload, compressedPayload, err := encodeCompressedEngineLogs(logs)
-	if err != nil {
-		return err
-	}
-
-	tx, err := s.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
-
-	if _, err = tx.ExecContext(ctx, `
-		INSERT OR REPLACE INTO compressed_engine_logs (game_id, data, uncompressed_size)
-		VALUES (?, ?, ?)
-	`, gameID, compressedPayload, len(jsonPayload)); err != nil {
-		return err
-	}
-
-	if _, err = tx.ExecContext(ctx, `DELETE FROM engine_logs WHERE game_id = ?`, gameID); err != nil {
-		return err
-	}
-
-	return tx.Commit()
-}
-
 func encodeCompressedEngineLogs(logs []EngineLog) ([]byte, []byte, error) {
 	payload := make(map[string]compressedPlyLog, len(logs))
 	plyOrder := make([]int, 0, len(logs))

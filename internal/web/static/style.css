@@ -209,9 +209,18 @@ a:hover {
     cursor: pointer;
 }
 
+.moves-list li.move-book {
+    color: var(--accent);
+}
+
 .moves-list li.active {
     color: var(--text);
     font-weight: 600;
+}
+
+.moves-list li.move-book.active {
+    color: var(--accent);
+    font-weight: 700;
 }
 
 .mono {

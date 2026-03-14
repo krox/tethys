@@ -17,6 +17,7 @@ type GameDetail struct {
 	White       string `db:"white"`
 	Black       string `db:"black"`
 	MovetimeMS  int    `db:"movetime_ms"`
+	BookPath    string `db:"book_path"`
 	Result      string `db:"result"`
 	Termination string `db:"termination"`
 	MovesUCI    string `db:"moves_uci"`

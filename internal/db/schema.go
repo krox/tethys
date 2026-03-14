@@ -56,14 +56,6 @@ var schema_stmts = []string{
 		engine_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
 		depth INTEGER NOT NULL DEFAULT 0
 	);`,
-	`CREATE TABLE IF NOT EXISTS engine_logs (
-		game_id INTEGER NOT NULL REFERENCES games(id) ON UPDATE CASCADE ON DELETE CASCADE,
-		ply INTEGER NOT NULL,
-		engine_id INTEGER NOT NULL REFERENCES players(id) ON UPDATE CASCADE ON DELETE RESTRICT,
-		elapsed_ms INTEGER NOT NULL DEFAULT 0,
-		log TEXT NOT NULL,
-		PRIMARY KEY (game_id, ply, engine_id)
-	);`,
 	`CREATE TABLE IF NOT EXISTS compressed_engine_logs (
 		game_id INTEGER PRIMARY KEY REFERENCES games(id) ON UPDATE CASCADE ON DELETE CASCADE,
 		data BLOB NOT NULL,
@@ -81,7 +73,6 @@ var schema_stmts = []string{
 	`CREATE INDEX IF NOT EXISTS idx_games_black_player_id ON games(black_player_id);`,
 	`CREATE INDEX IF NOT EXISTS idx_games_matchup ON games(white_player_id, black_player_id);`,
 	`CREATE INDEX IF NOT EXISTS idx_evals_engine_id ON evals(engine_id);`,
-	`CREATE INDEX IF NOT EXISTS idx_engine_logs_game_ply ON engine_logs(game_id, ply);`,
 	`CREATE INDEX IF NOT EXISTS idx_game_queue_created_at ON game_queue(created_at);`,
 }
 
@@ -109,7 +100,6 @@ func Open(path string) (*Store, error) {
 	for _, stmt := range schema_stmts {
 		db.MustExec(stmt)
 	}
-	ensureEngineLogColumns(db)
 	insertDefaultSettings(db)
 
 	return &Store{db: db}, nil
@@ -128,26 +118,4 @@ func insertDefaultSettings(db *sqlx.DB) {
 	db.MustExec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('game_book_path', '')`)
 	db.MustExec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('match_soft_scale', 300)`)
 	db.MustExec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('match_allow_mirror', 0)`)
-}
-
-func ensureEngineLogColumns(db *sqlx.DB) {
-	if !tableHasColumn(db, "engine_logs", "elapsed_ms") {
-		db.MustExec(`ALTER TABLE engine_logs ADD COLUMN elapsed_ms INTEGER NOT NULL DEFAULT 0`)
-	}
-}
-
-func tableHasColumn(db *sqlx.DB, table, column string) bool {
-	var cols []struct {
-		Name string `db:"name"`
-	}
-	query := fmt.Sprintf("SELECT name FROM pragma_table_info('%s')", table)
-	if err := db.Select(&cols, query); err != nil {
-		return false
-	}
-	for _, col := range cols {
-		if col.Name == column {
-			return true
-		}
-	}
-	return false
 }

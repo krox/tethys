@@ -298,21 +298,13 @@ func (h *Handler) handleGameView(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	logByPly, foundCompressed, err := h.store.CompressedEngineLogsByGame(r.Context(), id)
+	logByPly, _, err := h.store.CompressedEngineLogsByGame(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if !foundCompressed {
-		logs, err := h.store.ListEngineLogsByGame(r.Context(), id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		logByPly = make(map[int]db.EngineLog, len(logs))
-		for _, entry := range logs {
-			logByPly[entry.Ply] = entry
-		}
+	if logByPly == nil {
+		logByPly = make(map[int]db.EngineLog)
 	}
 	view, err := buildGameView(game, logByPly)
 	if err != nil {
@@ -330,6 +322,7 @@ type GameMoveView struct {
 	Side      string
 	Log       string
 	ElapsedMS int64
+	InBook    bool
 }
 
 type GamePositionView struct {
@@ -344,6 +337,8 @@ type GameView struct {
 	White       string
 	Black       string
 	MovetimeMS  int
+	BookName    string
+	BookPlies   int
 	Result      string
 	Termination string
 	Moves       []GameMoveView
@@ -416,7 +411,13 @@ func buildGameView(game db.GameDetail, logByPly map[int]db.EngineLog) (GameView,
 		}
 		move.Log = entry.Log
 		move.ElapsedMS = entry.ElapsedMS
+		move.InBook = ply <= game.BookPlies
 		moves = append(moves, move)
+	}
+
+	bookName := strings.TrimSpace(path.Base(strings.TrimSpace(game.BookPath)))
+	if bookName == "." || bookName == "/" {
+		bookName = ""
 	}
 
 	return GameView{
@@ -425,6 +426,8 @@ func buildGameView(game db.GameDetail, logByPly map[int]db.EngineLog) (GameView,
 		White:       game.White,
 		Black:       game.Black,
 		MovetimeMS:  game.MovetimeMS,
+		BookName:    bookName,
+		BookPlies:   game.BookPlies,
 		Result:      game.Result,
 		Termination: game.Termination,
 		Moves:       moves,

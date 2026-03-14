@@ -136,7 +136,7 @@ func (h *Handler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request
 			http.Error(w, "invalid book selection", http.StatusBadRequest)
 			return
 		}
-		gameBookPath = filepath.Join(h.booksDir, gameBook)
+		gameBookPath = gameBook
 	}
 
 	cfg.OpeningMin = openingMin

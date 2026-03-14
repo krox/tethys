@@ -41,6 +41,7 @@ type Runner struct {
 	store    *db.Store
 	b        *Broadcaster
 	bookMu   sync.Mutex
+	booksDir string
 	bookPath string
 	bookMod  time.Time
 	book     *book.Book
@@ -53,13 +54,14 @@ type Runner struct {
 	running   bool
 }
 
-func NewRunner(store *db.Store, b *Broadcaster) *Runner {
+func NewRunner(store *db.Store, b *Broadcaster, booksDir string) *Runner {
 	start := chess.StartingPosition()
 	r := &Runner{
-		store: store,
-		b:     b,
-		stop:  make(chan struct{}),
-		live:  LiveState{Status: "starting", FEN: start.String(), Board: boardFromPosition(start)},
+		store:    store,
+		b:        b,
+		booksDir: booksDir,
+		stop:     make(chan struct{}),
+		live:     LiveState{Status: "starting", FEN: start.String(), Board: boardFromPosition(start)},
 	}
 	return r
 }

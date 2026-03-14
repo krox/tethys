@@ -40,7 +40,7 @@ func New(dataDir string, dbPath string) (*App, error) {
 		return nil, err
 	}
 	b := engine.NewBroadcaster()
-	r := engine.NewRunner(sqlDB, b)
+	r := engine.NewRunner(sqlDB, b, booksDir)
 	r.Start(context.Background())
 	an := engine.NewAnalyzer(sqlDB)
 

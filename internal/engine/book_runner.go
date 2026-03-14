@@ -2,6 +2,7 @@ package engine
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/notnil/chess"
 
@@ -39,23 +40,28 @@ func (r *Runner) bookLine(start *chess.Position, assignment ColorAssignment) []s
 }
 
 func (r *Runner) loadBook(path string) (*book.Book, error) {
-	info, err := os.Stat(path)
+	resolved := path
+	if resolved != "" && !filepath.IsAbs(resolved) && r.booksDir != "" {
+		resolved = filepath.Join(r.booksDir, resolved)
+	}
+
+	info, err := os.Stat(resolved)
 	if err != nil {
 		return nil, err
 	}
 
 	r.bookMu.Lock()
 	defer r.bookMu.Unlock()
-	if r.book != nil && r.bookPath == path && r.bookMod.Equal(info.ModTime()) {
+	if r.book != nil && r.bookPath == resolved && r.bookMod.Equal(info.ModTime()) {
 		return r.book, nil
 	}
 
-	b, err := book.Load(path)
+	b, err := book.Load(resolved)
 	if err != nil {
 		return nil, err
 	}
 	r.book = b
-	r.bookPath = path
+	r.bookPath = resolved
 	r.bookMod = info.ModTime()
 	return r.book, nil
 }
