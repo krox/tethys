@@ -64,6 +64,11 @@ var schema_stmts = []string{
 		log TEXT NOT NULL,
 		PRIMARY KEY (game_id, ply, engine_id)
 	);`,
+	`CREATE TABLE IF NOT EXISTS compressed_engine_logs (
+		game_id INTEGER PRIMARY KEY REFERENCES games(id) ON UPDATE CASCADE ON DELETE CASCADE,
+		data BLOB NOT NULL,
+		uncompressed_size INTEGER NOT NULL
+	) WITHOUT ROWID;`,
 	`CREATE TABLE IF NOT EXISTS settings (
 		key TEXT PRIMARY KEY,
 		value

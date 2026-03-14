@@ -290,8 +290,8 @@ func (r *Runner) loop(parent context.Context) {
 					gameID, err := r.store.InsertFinishedGame(ctx, assignment.White.ID, assignment.Black.ID, assignment.MovetimeMS, assignment.BookPath, result, termination, strings.Join(movesUCI, " "), bookPlies)
 					if err != nil {
 						log.Printf("runner: insert game error: %v", err)
-					} else if err := r.store.InsertEngineLogs(ctx, gameID, engineLogs); err != nil {
-						log.Printf("runner: insert engine logs error: %v", err)
+					} else if err := r.store.InsertCompressedEngineLogs(ctx, gameID, engineLogs); err != nil {
+						log.Printf("runner: insert compressed engine logs error: %v", err)
 					}
 					r.setLive(func(ls *LiveState) {
 						ls.Status = "finished"
@@ -317,8 +317,8 @@ func (r *Runner) loop(parent context.Context) {
 					gameID, err := r.store.InsertFinishedGame(ctx, assignment.White.ID, assignment.Black.ID, assignment.MovetimeMS, assignment.BookPath, result, termination, strings.Join(movesUCI, " "), bookPlies)
 					if err != nil {
 						log.Printf("runner: insert game error: %v", err)
-					} else if err := r.store.InsertEngineLogs(ctx, gameID, engineLogs); err != nil {
-						log.Printf("runner: insert engine logs error: %v", err)
+					} else if err := r.store.InsertCompressedEngineLogs(ctx, gameID, engineLogs); err != nil {
+						log.Printf("runner: insert compressed engine logs error: %v", err)
 					}
 					r.setLive(func(ls *LiveState) {
 						ls.Status = "finished"
@@ -419,8 +419,8 @@ func (r *Runner) recordFailedGame(ctx context.Context, assignment ColorAssignmen
 	gameID, err := r.store.InsertFinishedGame(ctx, assignment.White.ID, assignment.Black.ID, assignment.MovetimeMS, assignment.BookPath, result, termination, strings.Join(movesUCI, " "), bookPlies)
 	if err != nil {
 		log.Printf("runner: insert game error: %v", err)
-	} else if err := r.store.InsertEngineLogs(ctx, gameID, engineLogs); err != nil {
-		log.Printf("runner: insert engine logs error: %v", err)
+	} else if err := r.store.InsertCompressedEngineLogs(ctx, gameID, engineLogs); err != nil {
+		log.Printf("runner: insert compressed engine logs error: %v", err)
 	}
 	r.setLive(func(ls *LiveState) {
 		ls.Status = "finished"

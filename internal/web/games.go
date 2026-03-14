@@ -298,14 +298,21 @@ func (h *Handler) handleGameView(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	logs, err := h.store.ListEngineLogsByGame(r.Context(), id)
+	logByPly, foundCompressed, err := h.store.CompressedEngineLogsByGame(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	logByPly := make(map[int]db.EngineLog, len(logs))
-	for _, entry := range logs {
-		logByPly[entry.Ply] = entry
+	if !foundCompressed {
+		logs, err := h.store.ListEngineLogsByGame(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		logByPly = make(map[int]db.EngineLog, len(logs))
+		for _, entry := range logs {
+			logByPly[entry.Ply] = entry
+		}
 	}
 	view, err := buildGameView(game, logByPly)
 	if err != nil {
